@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { useProtectedRoute, useAuth } from "../../hooks/useAuth";
 import SessionTimeoutModal from "../Modals/SessionTimeoutModal";
-import logoIndiqx from "../../assets/LOGO-INDIQX.svg";
+import logoIndiqx from "../../assets/indiqx-logo-w.png";
 
 const PrivateLayout = () => {
   const { isLoading, shouldRedirect, redirectTo } = useProtectedRoute("/");

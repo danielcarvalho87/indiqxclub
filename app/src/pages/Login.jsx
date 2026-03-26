@@ -4,7 +4,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Lock, User, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useLoginForm } from "../hooks/useAuth";
-import logoIndiqx from "../assets/LOGO-INDIQX.svg";
+import logoIndiqx from "../assets/indiqx-logo-w.png";
 
 const Login = () => {
   const navigate = useNavigate();

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../ui/Button";
-import logoIndiqx from "../../assets/LOGO-INDIQX.svg";
+import logoIndiqx from "../../assets/indiqx-logo-w.png";
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const { userLogout, userLevel, data } = useAuth();

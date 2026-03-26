@@ -242,7 +242,7 @@ export const AuthProvider = ({ children }) => {
       userStatus: null,
     };
     saveAuthState(newState);
-    navigate("/");
+    navigate("/login");
   }
 
   useEffect(() => {

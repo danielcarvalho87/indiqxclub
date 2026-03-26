@@ -3,7 +3,7 @@ export const API_URL =
   (window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1"
     ? "http://localhost:3011"
-    : "https://club-realeasy-dfa7c35adc3d.herokuapp.com");
+    : "https://app-indiqx-993928943e5f.herokuapp.com");
 
 export function TOKEN_POST(body) {
   return {

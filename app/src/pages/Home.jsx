@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { ArrowRight, Star, TrendingUp, Users, ShieldCheck } from "lucide-react";
-import logoIndiqx from "../assets/LOGO-INDIQX.svg";
+import logoIndiqx from "../assets/indiqx-logo-w.png";
 
 const Home = () => {
   const navigate = useNavigate();

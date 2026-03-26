@@ -13,9 +13,8 @@ async function bootstrap() {
     origin: [
       "http://localhost:3011",
       "http://localhost:5173",
-      "https://club-realeasy-dfa7c35adc3d.herokuapp.com",
-      "https://club-realeasy.web.app",
-      "https://club.realeasybr.com.br",
+      "https://app-indiqx.web.app",
+      "https://indiqx.club",
     ],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     allowedHeaders: "Content-Type, Accept, Authorization",
