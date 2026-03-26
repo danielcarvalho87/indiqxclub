@@ -17,8 +17,7 @@ const Home = () => {
         <div className="flex gap-4 items-center">
           <Button
             onClick={() => navigate("/login")}
-            variant="ghost"
-            className="text-sm"
+            className="text-sm font-semibold px-6 py-2 bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 transition-opacity shadow-lg shadow-brand-primary/20"
           >
             Entrar
           </Button>
