@@ -54,11 +54,20 @@ const Register = () => {
   });
 
   useEffect(() => {
+    // Redirecionar para o login se não houver refId
+    if (!refId) {
+      toast.error(
+        "Link de cadastro inválido. ID do administrador não encontrado.",
+      );
+      navigate("/login");
+      return;
+    }
+
     fetchRegisterToken();
     if (refId) {
       fetchEmpresaConfig(refId);
     }
-  }, [refId]);
+  }, [refId, navigate]);
 
   const fetchEmpresaConfig = async (masterId) => {
     try {
