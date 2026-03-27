@@ -14,7 +14,9 @@ import { CreateUserDto } from "./dto/create-user.dto";
 import { EmailService } from "../email/email.service";
 import { ConfiguracoesService } from "../configuracoes/configuracoes.service";
 import * as crypto from "crypto";
+import { IsPublic } from "../auth/decorators/is-public.decorator";
 
+@IsPublic()
 @Controller("public/user")
 export class PublicUserController {
   constructor(
@@ -280,6 +282,115 @@ export class PublicUserController {
 
       throw new HttpException(
         "Erro ao reenviar e-mail",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Solicitar redefinição de senha
+   * POST /public/user/forgot-password
+   */
+  @Post("forgot-password")
+  async forgotPassword(@Body() body: { email: string }) {
+    try {
+      const { email } = body;
+      const user = await this.userService.findByEmail(email);
+
+      if (!user) {
+        // Não retornar erro para não expor quais e-mails estão cadastrados
+        return {
+          success: true,
+          message: "Se o e-mail existir, um link de redefinição será enviado.",
+        };
+      }
+
+      // Gerar token de reset
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const tokenExpiration = new Date();
+      tokenExpiration.setHours(tokenExpiration.getHours() + 1); // 1 hora de validade
+
+      // Atualizar usuário com o token
+      await this.userService.update(user.id, {
+        resetPasswordToken: resetToken,
+        resetPasswordExpires: tokenExpiration,
+      } as any);
+
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      const resetUrl = `${frontendUrl}/reset?token=${resetToken}`;
+
+      await this.emailService.sendPasswordResetEmail(
+        user.email,
+        user.name,
+        resetUrl,
+      );
+
+      return {
+        success: true,
+        message: "Se o e-mail existir, um link de redefinição será enviado.",
+      };
+    } catch (error) {
+      console.error("Erro ao solicitar redefinição de senha:", error);
+      throw new HttpException(
+        "Erro ao solicitar redefinição de senha",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Redefinir senha com token
+   * POST /public/user/reset-password
+   */
+  @Post("reset-password")
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    try {
+      const { token, password } = body;
+
+      if (!token || !password) {
+        throw new HttpException(
+          "Token e nova senha são obrigatórios",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const user = await this.userService.findByResetToken(token);
+
+      if (
+        !user ||
+        !user.resetPasswordExpires ||
+        new Date() > user.resetPasswordExpires
+      ) {
+        throw new HttpException(
+          "Token inválido ou expirado",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Atualizar a senha (o hash é feito no userService.update)
+      await this.userService.update(user.id, {
+        password: password,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      } as any);
+
+      // Enviar e-mail de confirmação
+      await this.emailService.sendPasswordChangedConfirmation(
+        user.email,
+        user.name,
+      );
+
+      return {
+        success: true,
+        message: "Senha alterada com sucesso",
+      };
+    } catch (error) {
+      console.error("Erro ao redefinir senha:", error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        "Erro ao redefinir senha",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

@@ -162,6 +162,18 @@ export class UserService {
   }
 
   /**
+   * Busca usuário pelo token de reset de senha
+   * @param token Token de reset
+   */
+  async findByResetToken(token: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: {
+        resetPasswordToken: token,
+      },
+    });
+  }
+
+  /**
    * Verifica o e-mail do usuário (marca como verificado)
    * @param userId ID do usuário
    */

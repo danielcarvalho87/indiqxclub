@@ -72,6 +72,15 @@ const Login = () => {
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate("/reset")}
+                className="text-sm text-brand-primary hover:text-brand-hover hover:underline transition-colors"
+              >
+                Esqueceu sua senha?
+              </button>
+            </div>
           </div>
 
           <div>
