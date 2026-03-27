@@ -109,6 +109,86 @@ export class EmailService {
   }
 
   /**
+   * Envia e-mail de boas-vindas para parceiro com o nome da empresa
+   * @param email E-mail do parceiro
+   * @param name Nome do parceiro
+   * @param companyName Nome da empresa (master)
+   */
+  async sendPartnerRegistrationEmail(
+    email: string,
+    name: string,
+    companyName: string,
+  ): Promise<void> {
+    try {
+      await this.mailerService.sendMail({
+        to: email,
+        from: '"Indiqx Club" <noreply@indiqx.club>',
+        subject: `Bem-vindo à rede de parceiros da ${companyName}! - Indiqx Club`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f9fafb; border-radius: 8px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #3b82f6;">Cadastro Realizado!</h1>
+            </div>
+            <div style="background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+              <p>Olá, <strong>${name}</strong>!</p>
+              <p>Seu cadastro como parceiro da empresa <strong>${companyName}</strong> foi recebido com sucesso no Indiqx Club.</p>
+              <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 15px 0; border: 1px solid #fde68a;">
+                <p style="margin: 5px 0; color: #92400e;"><strong>Status Atual:</strong> Em Análise (Inativo)</p>
+              </div>
+              <p>Seu acesso está aguardando a aprovação do administrador da empresa. Você receberá um novo e-mail assim que seu acesso for liberado.</p>
+            </div>
+            <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px;">
+              <p>Este é um e-mail automático do Indiqx Club</p>
+            </div>
+          </div>
+        `,
+      });
+      console.log(`✅ E-mail de registro de parceiro enviado para: ${email}`);
+    } catch (error) {
+      console.error("❌ Erro ao enviar e-mail de registro de parceiro:", error);
+    }
+  }
+
+  /**
+   * Envia notificação de ativação de parceiro
+   * @param email E-mail do parceiro
+   * @param name Nome do parceiro
+   */
+  async sendPartnerActivationEmail(
+    email: string,
+    name: string,
+  ): Promise<void> {
+    try {
+      await this.mailerService.sendMail({
+        to: email,
+        from: '"Indiqx Club" <noreply@indiqx.club>',
+        subject: "✅ Conta Ativada! - Indiqx Club",
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f9fafb; border-radius: 8px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #10b981;">Conta Ativada!</h1>
+            </div>
+            <div style="background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+              <p>Olá, <strong>${name}</strong>!</p>
+              <p>Ótimas notícias! O administrador aprovou seu cadastro e sua conta agora está <strong>Ativa</strong>.</p>
+              <p>Você já pode acessar o painel do Indiqx Club e começar a indicar clientes.</p>
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="https://indiqx.club/login" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Painel</a>
+              </div>
+            </div>
+            <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px;">
+              <p>Este é um e-mail automático do Indiqx Club</p>
+            </div>
+          </div>
+        `,
+      });
+      console.log(`✅ Notificação de ativação de parceiro enviada para: ${email}`);
+    } catch (error) {
+      console.error("❌ Erro ao enviar notificação de ativação de parceiro:", error);
+    }
+  }
+
+  /**
    * Envia notificação de novo cliente indicado (para o administrador do parceiro)
    * @param email E-mail do destinatário (administrador)
    * @param adminName Nome do administrador

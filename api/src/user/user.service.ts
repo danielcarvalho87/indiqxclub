@@ -8,12 +8,15 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { Repository, LessThan } from "typeorm";
 import { User } from "./entities/user.entity";
 import * as bcrypt from "bcrypt";
+import { UserFromJwt } from "../auth/models/UserFromJwt";
+import { EmailService } from "../email/email.service";
 
 @Injectable()
 export class UserService {
   constructor(
     @Inject("USER_REPOSITORY")
     private userRepository: Repository<User>,
+    private emailService: EmailService,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -32,8 +35,24 @@ export class UserService {
     };
   }
 
-  findAll() {
-    return this.userRepository.find();
+  findAll(user?: UserFromJwt) {
+    if (!user) {
+      return this.userRepository.find();
+    }
+
+    const isAdmin = ["Administrador", "Admin", "FullAdmin"].includes(
+      user.level,
+    );
+
+    if (isAdmin) {
+      return this.userRepository.find({
+        where: [{ master_id: user.id }, { id: user.id }],
+      });
+    } else {
+      return this.userRepository.find({
+        where: { id: user.id },
+      });
+    }
   }
 
   findOne(id: number) {
@@ -48,6 +67,9 @@ export class UserService {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
+    // Buscar o usuário atual antes da atualização
+    const currentUser = await this.userRepository.findOne({ where: { id } });
+
     // Preparar dados para atualização
     const data = { ...updateUserDto };
 
@@ -76,6 +98,22 @@ export class UserService {
 
     // Buscar o usuário atualizado para retornar
     const updatedUser = await this.userRepository.findOne({ where: { id } });
+
+    // Enviar e-mail de ativação se o status mudou para Ativo
+    if (
+      currentUser &&
+      currentUser.status !== "Ativo" &&
+      updatedUser.status === "Ativo"
+    ) {
+      try {
+        await this.emailService.sendPartnerActivationEmail(
+          updatedUser.email,
+          updatedUser.name,
+        );
+      } catch (error) {
+        console.error("Erro ao enviar e-mail de ativação de parceiro:", error);
+      }
+    }
 
     return {
       ...updatedUser,

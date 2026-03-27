@@ -4,4 +4,5 @@ export interface UserFromJwt {
   name: string;
   level: string;
   status: string;
+  master_id?: number;
 }

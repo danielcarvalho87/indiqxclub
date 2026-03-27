@@ -12,6 +12,7 @@ import {
 import { UserService } from "./user.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { EmailService } from "../email/email.service";
+import { ConfiguracoesService } from "../configuracoes/configuracoes.service";
 import * as crypto from "crypto";
 
 @Controller("public/user")
@@ -19,6 +20,7 @@ export class PublicUserController {
   constructor(
     private readonly userService: UserService,
     private readonly emailService: EmailService,
+    private readonly configuracoesService: ConfiguracoesService,
   ) {}
 
   /**
@@ -93,6 +95,28 @@ export class PublicUserController {
         user.name,
         confirmationUrl,
       );
+
+      // Enviar e-mail informando o parceiro que ele foi cadastrado na empresa X
+      if (user.master_id) {
+        try {
+          const configuracoes = await this.configuracoesService.findByMasterId(
+            user.master_id,
+          );
+          if (configuracoes && configuracoes.length > 0) {
+            const empresaNome = configuracoes[0].nomeEmpresa;
+            await this.emailService.sendPartnerRegistrationEmail(
+              user.email,
+              user.name,
+              empresaNome,
+            );
+          }
+        } catch (error) {
+          console.log(
+            "Erro ao buscar configurações ou enviar e-mail de registro de parceiro:",
+            error,
+          );
+        }
+      }
 
       return {
         success: true,

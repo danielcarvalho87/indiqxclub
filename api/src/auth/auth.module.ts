@@ -8,11 +8,15 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LoginValidationMiddleware } from "./middlewares/login-validation.middleware";
 import { RegisterTokenGuard } from "./guards/register-token.guard";
+import { EmailModule } from "../email/email.module";
+import { ConfiguracoesModule } from "../configuracoes/configuracoes.module";
 
 @Module({
   imports: [
     UserModule,
     ConfigModule,
+    EmailModule,
+    ConfiguracoesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

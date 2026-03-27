@@ -8,12 +8,18 @@ import {
   Delete,
   UseGuards,
 } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from "@nestjs/swagger";
 import { ConfiguracoesService } from "./configuracoes.service";
 import { CreateConfiguracaoDto } from "./dto/create-configuracao.dto";
 import { UpdateConfiguracaoDto } from "./dto/update-configuracao.dto";
 import { Configuracao } from "./entities/configuracao.entity";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { IsPublic } from "../auth/decorators/is-public.decorator";
 
 @ApiTags("configuracoes")
 @ApiBearerAuth()
@@ -29,7 +35,9 @@ export class ConfiguracoesController {
     description: "Configuração criada com sucesso",
     type: Configuracao,
   })
-  create(@Body() createConfiguracaoDto: CreateConfiguracaoDto): Promise<Configuracao> {
+  create(
+    @Body() createConfiguracaoDto: CreateConfiguracaoDto,
+  ): Promise<Configuracao> {
     return this.configuracoesService.create(createConfiguracaoDto);
   }
 
@@ -57,6 +65,7 @@ export class ConfiguracoesController {
   }
 
   @Get("master/:masterId")
+  @IsPublic()
   @ApiOperation({ summary: "Buscar configurações por master ID" })
   @ApiResponse({
     status: 200,
@@ -77,14 +86,17 @@ export class ConfiguracoesController {
   @ApiResponse({ status: 404, description: "Configuração não encontrada" })
   update(
     @Param("id") id: string,
-    @Body() updateConfiguracaoDto: UpdateConfiguracaoDto
+    @Body() updateConfiguracaoDto: UpdateConfiguracaoDto,
   ): Promise<Configuracao> {
     return this.configuracoesService.update(+id, updateConfiguracaoDto);
   }
 
   @Delete(":id")
   @ApiOperation({ summary: "Remover configuração" })
-  @ApiResponse({ status: 204, description: "Configuração removida com sucesso" })
+  @ApiResponse({
+    status: 204,
+    description: "Configuração removida com sucesso",
+  })
   @ApiResponse({ status: 404, description: "Configuração não encontrada" })
   remove(@Param("id") id: string): Promise<void> {
     return this.configuracoesService.remove(+id);

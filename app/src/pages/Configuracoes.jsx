@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
+import { Copy, Check } from "lucide-react";
 import { GET_CONFIGURACOES, POST_CONFIGURACAO, PUT_CONFIGURACAO } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
@@ -11,6 +12,7 @@ const Configuracoes = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [configId, setConfigId] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const [formData, setFormData] = useState({
     nomeEmpresa: "",
@@ -59,6 +61,15 @@ const Configuracoes = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const linkCadastro = `${window.location.origin}/register?ref=${userId}`;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(linkCadastro);
+    setCopied(true);
+    toast.success("Link copiado para a área de transferência!");
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSubmit = async (e) => {
@@ -122,6 +133,36 @@ const Configuracoes = () => {
       </div>
 
       <Card className="max-w-2xl">
+        <div className="mb-8 p-4 bg-brand-dark/50 rounded-lg border border-white/5">
+          <h3 className="text-sm font-medium text-brand-text/90 mb-2">
+            Link de Cadastro para Parceiros
+          </h3>
+          <p className="text-xs text-brand-text/60 mb-3">
+            Compartilhe este link com seus parceiros para que eles se cadastrem
+            já vinculados à sua empresa.
+          </p>
+          <div className="flex items-center gap-2">
+            <Input
+              value={linkCadastro}
+              readOnly
+              className="bg-brand-dark/80 text-brand-text/80 cursor-default flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCopyLink}
+              className="flex items-center gap-2 min-w-[120px] justify-center"
+            >
+              {copied ? (
+                <Check size={16} className="text-green-500" />
+              ) : (
+                <Copy size={16} />
+              )}
+              {copied ? "Copiado!" : "Copiar Link"}
+            </Button>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-4">
             <div>

@@ -8,12 +8,16 @@ import { UserPayload } from "./models/UserPayload";
 import { UserToken } from "./models/UserToken";
 import { UnauthorizedError } from "./errors/unauthorized.error";
 import { CreateUserPublicDto } from "./dto/create-user-public.dto";
+import { EmailService } from "../email/email.service";
+import { ConfiguracoesService } from "../configuracoes/configuracoes.service";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly userService: UserService
+    private readonly userService: UserService,
+    private readonly emailService: EmailService,
+    private readonly configuracoesService: ConfiguracoesService
   ) { }
 
   // ============================================

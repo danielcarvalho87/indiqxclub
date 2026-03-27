@@ -21,6 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       name: payload.name,
       level: payload.level,
       status: payload.status,
+      master_id: payload.master_id,
     };
   }
 }

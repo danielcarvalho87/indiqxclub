@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   User,
@@ -19,9 +19,14 @@ import logoIndiqx from "../assets/LOGO-INDIQX.svg";
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const refId = queryParams.get("ref");
+
   const [loading, setLoading] = useState(false);
   const [registerToken, setRegisterToken] = useState(null);
   const [step, setStep] = useState(1); // 1: Pessoais, 2: Endereço, 3: Acesso
+  const [empresaNome, setEmpresaNome] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -45,11 +50,32 @@ const Register = () => {
     plano_id: 1, // Default plan
     level: "Parceiro",
     status: "Inativo",
+    master_id: refId ? Number(refId) : 0,
   });
 
   useEffect(() => {
     fetchRegisterToken();
-  }, []);
+    if (refId) {
+      fetchEmpresaConfig(refId);
+    }
+  }, [refId]);
+
+  const fetchEmpresaConfig = async (masterId) => {
+    try {
+      // Using API_URL to make a public call
+      const response = await fetch(
+        `${API_URL}/configuracoes/master/${masterId}`,
+      );
+      if (response.ok) {
+        const json = await response.json();
+        if (json && json.length > 0) {
+          setEmpresaNome(json[0].nomeEmpresa);
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao buscar configurações da empresa:", error);
+    }
+  };
 
   const fetchRegisterToken = async () => {
     try {
@@ -174,8 +200,8 @@ const Register = () => {
           <div>
             <img src={logoIndiqx} alt="Indiqx" className="h-10 mb-6" />
             <p className="text-brand-muted text-sm">
-              Junte-se ao clube de benefícios mais completo para parceiros de
-              imóveis.
+              Junte-se ao clube de benefícios mais completo para parceiros da{" "}
+              {empresaNome}
             </p>
           </div>
 
@@ -218,9 +244,14 @@ const Register = () => {
 
         {/* Form Area */}
         <div className="p-8 md:w-2/3">
-          <h2 className="text-2xl font-bold text-brand-text mb-6">
+          <h2 className="text-2xl font-bold text-brand-text mb-2">
             Cadastro de Parceiro
           </h2>
+          {empresaNome && (
+            <div className="mb-6 inline-block bg-brand-primary/20 text-brand-primary px-3 py-1 rounded-full text-lg font-medium border border-brand-primary/30">
+              <strong>{empresaNome}</strong>
+            </div>
+          )}
 
           {/* Progress Steps */}
           <div className="flex items-center mb-8 text-sm">
@@ -409,15 +440,6 @@ const Register = () => {
 
             {step === 3 && (
               <div className="space-y-4 animate-fade-in">
-                <div className="grid grid-cols-1 gap-4">
-                  <Input
-                    name="especialidade"
-                    placeholder="Especialidade"
-                    value={formData.especialidade}
-                    onChange={handleChange}
-                    icon={Briefcase}
-                  />
-                </div>
                 <Input
                   name="email"
                   type="email"

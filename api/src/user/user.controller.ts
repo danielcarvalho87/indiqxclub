@@ -49,6 +49,9 @@ const multerConfig = {
 
 import { IsPublic } from "../auth/decorators/is-public.decorator";
 
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { UserFromJwt } from "../auth/models/UserFromJwt";
+
 @Controller("user")
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -76,7 +79,7 @@ export class UserController {
       if (error instanceof HttpException) throw error;
       throw new HttpException(
         `Erro ao buscar usuário: ${error.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -235,15 +238,17 @@ export class UserController {
 
   @Get()
   findAll(
-    @Query("userId") userId?: string,
-    @Query("userLevel") userLevel?: string,
+    @Query("userId") userId: string,
+    @Query("userLevel") userLevel: string,
+    @CurrentUser() currentUser: UserFromJwt,
   ) {
-    // Se userId e userLevel foram fornecidos, usar a nova lógica
+    // Se userId e userLevel foram fornecidos, usar a nova lógica (retrocompatibilidade)
     if (userId && userLevel) {
       return this.userService.getUsuariosByUserLevel(+userId, +userLevel);
     }
-    // Caso contrário, manter comportamento original
-    return this.userService.findAll();
+
+    // Filtro pelo usuário logado
+    return this.userService.findAll(currentUser);
   }
 
   @Get(":id")
