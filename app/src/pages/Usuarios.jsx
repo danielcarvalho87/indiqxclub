@@ -31,9 +31,8 @@ const Usuarios = () => {
         if (userLevel === "FullAdmin" || userLevel === "Full Admin") {
           // Full Admin vê todos os usuários sem filtro
         } else if (userLevel === "Administrador") {
-          json = json.filter(
-            (user) => user.master_id === userId || user.id === userId,
-          );
+          // Administrador vê apenas seus próprios dados (já que não gerencia parceiros nesta tela)
+          json = json.filter((user) => user.id === userId);
         } else if (userLevel === "Parceiro") {
           json = json.filter((user) => user.id === userId);
         }
@@ -143,15 +142,17 @@ const Usuarios = () => {
     return user.level === "Administrador" || user.level === "Admin";
   });
 
+  const isFullAdmin = userLevel === "FullAdmin" || userLevel === "Full Admin";
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 md:gap-0">
         <h1 className="text-3xl font-bold text-brand-text">
-          {userLevel === "FullAdmin" || userLevel === "Full Admin"
-            ? "Usuários"
-            : "Usuários (Administradores)"}
+          {isFullAdmin ? "Usuários" : "Meus Dados"}
         </h1>
-        <Button onClick={() => handleOpenModal()}>Novo Usuário</Button>
+        {isFullAdmin && (
+          <Button onClick={() => handleOpenModal()}>Novo Usuário</Button>
+        )}
       </div>
 
       <Card>
@@ -233,15 +234,17 @@ const Usuarios = () => {
                         >
                           <Pencil size={18} />
                         </Button>
-                        <Button
-                          onClick={() => handleOpenConfirmDelete(usuario)}
-                          variant="danger"
-                          size="sm"
-                          className="min-w-[42px] px-3"
-                          title="Excluir"
-                        >
-                          <Trash2 size={18} />
-                        </Button>
+                        {isFullAdmin && (
+                          <Button
+                            onClick={() => handleOpenConfirmDelete(usuario)}
+                            variant="danger"
+                            size="sm"
+                            className="min-w-[42px] px-3"
+                            title="Excluir"
+                          >
+                            <Trash2 size={18} />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -42,7 +42,7 @@ const UserRegistrationModal = ({
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        setFormData({ ...defaultFormState, ...initialData });
+        setFormData({ ...defaultFormState, ...initialData, password: "" });
         setIsEditing(true);
       } else {
         setFormData(defaultFormState);

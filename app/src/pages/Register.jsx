@@ -10,6 +10,8 @@ import {
   Briefcase,
   ArrowLeft,
   CheckCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -27,6 +29,8 @@ const Register = () => {
   const [registerToken, setRegisterToken] = useState(null);
   const [step, setStep] = useState(1); // 1: Pessoais, 2: Endereço, 3: Acesso
   const [empresaNome, setEmpresaNome] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -93,7 +97,7 @@ const Register = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setRegisterToken(data.token);
+        setRegisterToken(data.access_token);
       } else {
         toast.error("Erro ao iniciar sessão de cadastro.");
       }
@@ -456,28 +460,55 @@ const Register = () => {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  icon={Mail}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    name="password"
-                    type="password"
-                    placeholder="Senha *"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    icon={Lock}
-                  />
-                  <Input
-                    name="confirmPassword"
-                    type="password"
-                    placeholder="Confirmar Senha *"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                    icon={Lock}
-                  />
+                  <div className="relative">
+                    <Input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Senha *"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-brand-muted hover:text-brand-primary"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Confirmar Senha *"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-brand-muted hover:text-brand-primary"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff size={20} />
+                      ) : (
+                        <Eye size={20} />
+                      )}
+                    </button>
+                  </div>
                 </div>
+                {formData.confirmPassword &&
+                  formData.password !== formData.confirmPassword && (
+                    <p className="text-red-500 text-sm">
+                      As senhas não coincidem.
+                    </p>
+                  )}
                 <div className="flex justify-between pt-4">
                   <Button
                     type="button"
