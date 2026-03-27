@@ -21,7 +21,7 @@ export class EmailController {
   constructor(
     private readonly emailService: EmailService,
     @Inject("USER_REPOSITORY")
-    private userRepository: Repository<User>
+    private userRepository: Repository<User>,
   ) {}
 
   // ============================================
@@ -55,7 +55,7 @@ export class EmailController {
       // Isso evita que atacantes descubram quais e-mails estão cadastrados
       if (!user) {
         console.log(
-          `⚠️ Tentativa de reset para e-mail não cadastrado: ${normalizedEmail}`
+          `⚠️ Tentativa de reset para e-mail não cadastrado: ${normalizedEmail}`,
         );
         return {
           success: true,
@@ -78,15 +78,14 @@ export class EmailController {
       await this.userRepository.save(user);
 
       // Montar URL de reset
-      const frontendUrl =
-        process.env.FRONTEND_URL || "http://localhost:5173";
-      const resetUrl = `${frontendUrl}/nova-senha?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
+      const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
+      const resetUrl = `${frontendUrl}/reset?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
       // Enviar e-mail de reset
       await this.emailService.sendPasswordResetEmail(
         user.email,
         user.name,
-        resetUrl
+        resetUrl,
       );
 
       console.log(`✅ E-mail de reset enviado para: ${normalizedEmail}`);
@@ -105,7 +104,7 @@ export class EmailController {
 
       throw new HttpException(
         "Erro ao processar solicitação",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -124,7 +123,7 @@ export class EmailController {
       if (!token || !email) {
         throw new HttpException(
           "Token e e-mail são obrigatórios",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -144,7 +143,7 @@ export class EmailController {
       if (!user) {
         throw new HttpException(
           "Token inválido ou expirado",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -170,7 +169,7 @@ export class EmailController {
 
       throw new HttpException(
         "Erro ao validar token",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -183,7 +182,7 @@ export class EmailController {
   @IsPublic()
   @Post("reset-password")
   async resetPassword(
-    @Body() body: { token: string; email: string; newPassword: string }
+    @Body() body: { token: string; email: string; newPassword: string },
   ) {
     try {
       const { token, email, newPassword } = body;
@@ -191,14 +190,14 @@ export class EmailController {
       if (!token || !email || !newPassword) {
         throw new HttpException(
           "Todos os campos são obrigatórios",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
       if (newPassword.length < 6) {
         throw new HttpException(
           "A senha deve ter no mínimo 6 caracteres",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -218,7 +217,7 @@ export class EmailController {
       if (!user) {
         throw new HttpException(
           "Token inválido ou expirado",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -244,7 +243,7 @@ export class EmailController {
       // Enviar e-mail de confirmação de alteração
       await this.emailService.sendPasswordChangedConfirmation(
         user.email,
-        user.name
+        user.name,
       );
 
       console.log(`✅ Senha alterada com sucesso para: ${normalizedEmail}`);
@@ -262,7 +261,7 @@ export class EmailController {
 
       throw new HttpException(
         "Erro ao redefinir senha",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -286,7 +285,7 @@ export class EmailController {
       valor: number;
       paymentMethod: string;
       transactionId?: string;
-    }
+    },
   ) {
     try {
       const { userId, planoNome, valor, paymentMethod, transactionId } = body;
@@ -321,7 +320,7 @@ export class EmailController {
 
       throw new HttpException(
         "Erro ao enviar e-mail de confirmação",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -355,7 +354,7 @@ export class EmailController {
 
       throw new HttpException(
         "Erro ao enviar e-mail de teste",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -376,11 +375,11 @@ export class EmailController {
       }
 
       console.log(
-        `🧪 TESTE: Iniciando envio de e-mail de verificação para: ${email}`
+        `🧪 TESTE: Iniciando envio de e-mail de verificação para: ${email}`,
       );
 
       // Criar URL de teste
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3005";
+      const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const testToken = "test-token-" + crypto.randomBytes(16).toString("hex");
       const confirmationUrl = `${frontendUrl}/confirm-email?token=${testToken}`;
 
@@ -390,11 +389,11 @@ export class EmailController {
       await this.emailService.sendEmailVerification(
         email,
         name,
-        confirmationUrl
+        confirmationUrl,
       );
 
       console.log(
-        `🧪 TESTE: E-mail de verificação enviado com sucesso para: ${email}`
+        `🧪 TESTE: E-mail de verificação enviado com sucesso para: ${email}`,
       );
 
       return {
@@ -407,7 +406,7 @@ export class EmailController {
     } catch (error) {
       console.error(
         "🧪 TESTE: Erro detalhado ao enviar e-mail de verificação:",
-        error
+        error,
       );
 
       return {

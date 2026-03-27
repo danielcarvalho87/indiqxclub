@@ -85,9 +85,8 @@ export class PublicUserController {
       // Criar usuário
       const user = await this.userService.create(userData);
 
-      // ✅ CORREÇÃO: URL configurada para localhost:3005 para testes
-      // Em produção, usar: process.env.FRONTEND_URL
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3005";
+      // ✅ URL do Frontend: Usa a variável de ambiente, ou 'https://indiqx.club' em produção
+      const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const confirmationUrl = `${frontendUrl}/confirm-email?token=${emailToken}`;
 
       console.log("📧 URL de confirmação gerada:", confirmationUrl);
@@ -258,7 +257,7 @@ export class PublicUserController {
         tokenExpiration,
       );
 
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const confirmationUrl = `${frontendUrl}/confirm-email?token=${emailToken}`;
 
       console.log("📧 URL de reenvio gerada:", confirmationUrl);
@@ -316,7 +315,7 @@ export class PublicUserController {
         resetPasswordExpires: tokenExpiration,
       } as any);
 
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const resetUrl = `${frontendUrl}/reset?token=${resetToken}`;
 
       await this.emailService.sendPasswordResetEmail(
