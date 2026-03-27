@@ -13,6 +13,8 @@ import {
 } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const Bonificacoes = () => {
   const [bonificacoes, setBonificacoes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,15 +33,17 @@ const Bonificacoes = () => {
       const response = await fetch(url, options);
       if (response.ok) {
         let json = await response.json();
-        
+
         // Filtragem baseada no nível de acesso
         if (userLevel === "FullAdmin" || userLevel === "Full Admin") {
           // Full Admin vê todas as bonificações
         } else if (userLevel === "Administrador" || userLevel === "Admin") {
           // Administrador vê apenas as bonificações que ele mesmo cadastrou (baseado no master_id ou id dele)
-          json = json.filter((item) => item.master_id === userId || item.userId === userId);
+          json = json.filter(
+            (item) => item.master_id === userId || item.userId === userId,
+          );
         }
-        
+
         setBonificacoes(json);
       } else {
         toast.error("Erro ao carregar bonificações.");
@@ -138,6 +142,10 @@ const Bonificacoes = () => {
       item.descricao.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando bonificações..." />;
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 md:gap-0">
@@ -176,13 +184,7 @@ const Bonificacoes = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="5" className="py-4 text-center text-brand-muted">
-                    Carregando...
-                  </td>
-                </tr>
-              ) : filteredBonificacoes.length === 0 ? (
+              {filteredBonificacoes.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="py-4 text-center text-brand-muted">
                     Nenhuma bonificação encontrada.

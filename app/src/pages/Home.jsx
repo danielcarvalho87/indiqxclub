@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { ArrowRight, Star, TrendingUp, Users, ShieldCheck } from "lucide-react";
 import logoIndiqx from "../assets/indiqx-logo-w.png";
 

@@ -15,6 +15,8 @@ import { Card } from "../components/ui/Card";
 import { GET_CLIENTES, GET_USERS, GET_CONFIGURACOES } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const Relatorios = () => {
   const { userId, userLevel, masterId } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -237,6 +239,10 @@ const Relatorios = () => {
     }).format(value);
   };
 
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando relatórios..." />;
+  }
+
   return (
     <div className="space-y-8 p-4 md:p-8 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -358,12 +364,8 @@ const Relatorios = () => {
         <div className="lg:col-span-2">
           <Card title="Evolução de Vendas (Últimos 6 Meses)" className="h-full">
             <div className="mt-8 h-64 flex items-end justify-between gap-4 px-4">
-              {loading ? (
-                <div className="w-full h-full flex items-center justify-center text-brand-muted">
-                  Carregando gráfico...
-                </div>
-              ) : monthlyData.length === 0 ||
-                monthlyData.every((m) => m.value === 0) ? (
+              {monthlyData.length === 0 ||
+              monthlyData.every((m) => m.value === 0) ? (
                 <div className="w-full h-full flex items-center justify-center text-brand-muted">
                   Sem dados suficientes para o período.
                 </div>
@@ -402,9 +404,7 @@ const Relatorios = () => {
           <Card title="Funil de Vendas" className="h-full">
             <div className="space-y-6 mt-4">
               {loading ? (
-                <div className="text-center text-brand-muted py-10">
-                  Carregando funil...
-                </div>
+                <LoadingSpinner size={48} message="Carregando funil..." />
               ) : (
                 funnelData.map((item, index) => (
                   <div key={index}>
@@ -459,7 +459,7 @@ const Relatorios = () => {
               {loading ? (
                 <tr>
                   <td colSpan="5" className="py-8 text-center text-brand-muted">
-                    Carregando ranking...
+                    <LoadingSpinner size={48} message="Carregando ranking..." />
                   </td>
                 </tr>
               ) : topBrokers.length === 0 ? (

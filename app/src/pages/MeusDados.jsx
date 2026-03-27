@@ -8,6 +8,8 @@ import { useAuth } from "../hooks/useAuth";
 import { PUT_USER, GET_USER } from "../api";
 import { maskCPF, maskPhone } from "../utils/masks";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const MeusDados = () => {
   const { userId, data: userData, userLogin } = useAuth(); // userLogin might be needed to refresh token if password changes? No.
   const [loading, setLoading] = useState(false);
@@ -169,6 +171,10 @@ const MeusDados = () => {
   const labelStyle = "block text-sm font-medium text-brand-muted mb-1";
   const selectStyle =
     "w-full bg-brand-surface border border-brand-border rounded px-3 py-2 text-brand-text focus:outline-none focus:border-brand-primary transition-colors duration-200";
+
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando seus dados..." />;
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">

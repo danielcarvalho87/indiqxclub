@@ -15,6 +15,8 @@ import {
 } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const Clientes = () => {
   const { userLevel, userId } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -225,6 +227,10 @@ const Clientes = () => {
     return matchName || matchEmail || matchTelefone || matchParceiro;
   });
 
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando clientes..." />;
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 md:gap-0">
@@ -255,13 +261,7 @@ const Clientes = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="5" className="py-4 text-center text-brand-muted">
-                    Carregando...
-                  </td>
-                </tr>
-              ) : filteredClientes.length === 0 ? (
+              {filteredClientes.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="py-4 text-center text-brand-muted">
                     Nenhum cliente encontrado.

@@ -15,6 +15,8 @@ import { Card } from "../components/ui/Card";
 import { GET_CLIENTES, GET_BONIFICACOES, GET_CONFIGURACOES } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const MeusGanhos = () => {
   const { userId, userLevel, masterId } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,9 @@ const MeusGanhos = () => {
 
       // Descobrir qual é o masterId para buscar configurações
       const targetMasterId =
-        userLevel === "Administrador" || userLevel === "Admin" || userLevel === "FullAdmin"
+        userLevel === "Administrador" ||
+        userLevel === "Admin" ||
+        userLevel === "FullAdmin"
           ? userId
           : masterId;
 
@@ -116,7 +120,8 @@ const MeusGanhos = () => {
 
     // Pontos = (clientes indicados * pontos por usuário) + (1 ponto para cada real do faturamento total)
     const pontosAcumulados =
-      (clientesIndicados * Number(configData.pontosPorNovoUsuario)) + Math.floor(faturamentoTotal);
+      clientesIndicados * Number(configData.pontosPorNovoUsuario) +
+      Math.floor(faturamentoTotal);
 
     // Comissão é baseada na porcentagem configurada sobre o faturamento total
     const comissaoEstimada =
@@ -168,6 +173,10 @@ const MeusGanhos = () => {
     100,
     (stats.pontosAcumulados / maxPoints) * 100,
   );
+
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando ganhos..." />;
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">

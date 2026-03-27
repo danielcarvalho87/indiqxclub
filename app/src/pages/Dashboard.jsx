@@ -21,6 +21,8 @@ import ClientViewModal from "../components/Modals/ClientViewModal";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const Dashboard = () => {
   const { userId, userLevel, masterId } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -317,6 +319,10 @@ const Dashboard = () => {
     "Contrato perdido": "bg-rose-500/10 text-rose-300",
   };
 
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando dashboard..." />;
+  }
+
   return (
     <div className="space-y-6 p-3 md:p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -324,7 +330,10 @@ const Dashboard = () => {
           const Icon = card.icon;
 
           return (
-            <Card key={card.title} className={`border-l-4 ${card.borderColor} bg-gradient-to-br from-gray-800 to-gray-900 p-5`}>
+            <Card
+              key={card.title}
+              className={`border-l-4 ${card.borderColor} bg-gradient-to-br from-gray-800 to-gray-900 p-5`}
+            >
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <p className="text-brand-muted text-sm font-medium uppercase tracking-wider">
@@ -358,9 +367,7 @@ const Dashboard = () => {
           </div>
 
           {loading ? (
-            <div className="flex h-64 items-center justify-center text-brand-muted">
-              Carregando clientes...
-            </div>
+            <LoadingSpinner size={48} message="Carregando clientes..." />
           ) : recentClients.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-brand-surfaceAlt text-brand-muted">
               <User size={42} className="mb-4 opacity-40" />

@@ -7,6 +7,8 @@ import { Copy, Check } from "lucide-react";
 import { GET_CONFIGURACOES, POST_CONFIGURACAO, PUT_CONFIGURACAO } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const Configuracoes = () => {
   const { userId } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -112,11 +114,7 @@ const Configuracoes = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-brand-primary">Carregando...</div>
-      </div>
-    );
+    return <LoadingSpinner fullScreen message="Carregando configurações..." />;
   }
 
   return (

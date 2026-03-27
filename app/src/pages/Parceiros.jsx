@@ -8,6 +8,8 @@ import ConfirmModal from "../components/Modals/ConfirmModal";
 import { GET_USERS, POST_USER, PUT_USER, DELETE_USER } from "../api";
 import { useAuth } from "../hooks/useAuth";
 
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
 const Parceiros = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -150,6 +152,10 @@ const Parceiros = () => {
     return matchName || matchEmail || matchCpf;
   });
 
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Carregando parceiros..." />;
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4 md:gap-0">
@@ -180,16 +186,7 @@ const Parceiros = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan="5"
-                    className="py-4 px-4 text-center text-brand-muted"
-                  >
-                    Carregando parceiros...
-                  </td>
-                </tr>
-              ) : filteredParceiros.length === 0 ? (
+              {filteredParceiros.length === 0 ? (
                 <tr>
                   <td
                     colSpan="5"
