@@ -40,11 +40,12 @@ export class UserService {
       return this.userRepository.find();
     }
 
-    const isAdmin = ["Administrador", "Admin", "FullAdmin"].includes(
-      user.level,
-    );
+    const isFullAdmin = ["FullAdmin", "Full Admin"].includes(user.level);
+    const isAdmin = ["Administrador", "Admin"].includes(user.level);
 
-    if (isAdmin) {
+    if (isFullAdmin) {
+      return this.userRepository.find();
+    } else if (isAdmin) {
       return this.userRepository.find({
         where: [{ master_id: user.id }, { id: user.id }],
       });

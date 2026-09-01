@@ -40,7 +40,9 @@ const Bonificacoes = () => {
         } else if (userLevel === "Administrador" || userLevel === "Admin") {
           // Administrador vê apenas as bonificações que ele mesmo cadastrou (baseado no master_id ou id dele)
           json = json.filter(
-            (item) => item.master_id === userId || item.userId === userId,
+            (item) =>
+              String(item.master_id) === String(userId) ||
+              String(item.userId) === String(userId),
           );
         }
 

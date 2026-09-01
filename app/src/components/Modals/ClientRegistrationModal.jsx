@@ -146,7 +146,11 @@ const ClientRegistrationModal = ({
             </div>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <Input
-                label="Nome"
+                label={
+                  <span>
+                    Nome <span className="text-red-500">*</span>
+                  </span>
+                }
                 name="nome"
                 value={formData.nome}
                 onChange={handleChange}
@@ -161,7 +165,11 @@ const ClientRegistrationModal = ({
                 placeholder="Sobrenome"
               />
               <Input
-                label="Telefone"
+                label={
+                  <span>
+                    Telefone <span className="text-red-500">*</span>
+                  </span>
+                }
                 name="telefone"
                 value={formData.telefone}
                 onChange={handleChange}
@@ -176,6 +184,28 @@ const ClientRegistrationModal = ({
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="email@exemplo.com"
+              />
+
+              <Input
+                label={
+                  <span>
+                    Interesse em <span className="text-red-500">*</span>
+                  </span>
+                }
+                name="tipo_servico"
+                value={formData.tipo_servico}
+                onChange={handleChange}
+                required
+                placeholder="Qual serviço/produto está interessado?"
+              />
+
+              <Input
+                label="Valor do Contrato"
+                name="valor_contrato"
+                type="text"
+                value={formData.valor_contrato}
+                onChange={handleChange}
+                placeholder="R$ 0,00"
               />
 
               <div className="flex flex-col gap-2 relative" ref={dropdownRef}>
@@ -293,24 +323,6 @@ const ClientRegistrationModal = ({
                   </div>
                 )}
               </div>
-
-              <Input
-                label="Tipo de Serviço"
-                name="tipo_servico"
-                value={formData.tipo_servico}
-                onChange={handleChange}
-                required
-                placeholder="Ex: Venda, Aluguel"
-              />
-
-              <Input
-                label="Valor do Contrato"
-                name="valor_contrato"
-                type="text"
-                value={formData.valor_contrato}
-                onChange={handleChange}
-                placeholder="R$ 0,00"
-              />
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-brand-muted">

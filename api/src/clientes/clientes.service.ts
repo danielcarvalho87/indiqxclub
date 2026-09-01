@@ -54,11 +54,16 @@ export class ClientesService {
   }
 
   async findAll(user: UserFromJwt) {
-    const isAdmin = ["Administrador", "Admin", "FullAdmin"].includes(
-      user.level,
-    );
+    const isFullAdmin = ["FullAdmin", "Full Admin"].includes(user.level);
+    const isAdmin = ["Administrador", "Admin"].includes(user.level);
 
-    if (isAdmin) {
+    if (isFullAdmin) {
+      return this.clienteRepository
+        .createQueryBuilder("cliente")
+        .leftJoinAndSelect("cliente.corretor", "corretor")
+        .orderBy("cliente.created_at", "DESC")
+        .getMany();
+    } else if (isAdmin) {
       return this.clienteRepository
         .createQueryBuilder("cliente")
         .leftJoinAndSelect("cliente.corretor", "corretor")

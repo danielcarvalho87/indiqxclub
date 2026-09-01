@@ -84,11 +84,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     // Normalizar nível 'administrador' para 'admin' para corresponder aos roles
     if (level === "administrador") level = "admin";
     if (level === "fulladmin") {
-      // Ocultar menus exclusivos de parceiro e Configurações para o FullAdmin
+      // Ocultar menus exclusivos de parceiro para o FullAdmin
       if (
         item.path === "/meus-ganhos" ||
-        item.path === "/meus-dados" ||
-        item.path === "/configuracoes"
+        item.path === "/meus-dados"
       ) {
         return false;
       }

@@ -87,7 +87,18 @@ const MeusGanhos = () => {
       const { url: urlBonificacoes, options: optionsBonificacoes } =
         GET_BONIFICACOES(token);
       const resBonificacoes = await fetch(urlBonificacoes, optionsBonificacoes);
-      const bonificacoesData = await resBonificacoes.json();
+      let bonificacoesData = await resBonificacoes.json();
+
+      // Filtrar bonificações baseado no nível de acesso
+      if (userLevel === "Parceiro" || userLevel === "Corretor") {
+        bonificacoesData = bonificacoesData.filter(
+          (b) => String(b.userId) === String(masterId) || String(b.master_id) === String(masterId)
+        );
+      } else if (userLevel === "Administrador" || userLevel === "Admin") {
+        bonificacoesData = bonificacoesData.filter(
+          (b) => String(b.userId) === String(userId) || String(b.master_id) === String(userId)
+        );
+      }
 
       // Filtrar e Calcular
       processData(clientes, bonificacoesData, configData);
@@ -212,7 +223,7 @@ const MeusGanhos = () => {
       </div>
 
       {/* Stats Cards - Modern Glassmorphism Style */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         <Card className="!p-0 relative overflow-hidden group bg-gradient-to-br from-gray-900 to-gray-800 border-brand-border/50 hover:border-blue-500/50 transition-all duration-300">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Users size={80} />
@@ -238,7 +249,7 @@ const MeusGanhos = () => {
           </div>
         </Card>
 
-        <Card className="!p-0 relative overflow-hidden group bg-gradient-to-br from-gray-900 to-gray-800 border-brand-border/50 hover:border-green-500/50 transition-all duration-300">
+        {/* <Card className="!p-0 relative overflow-hidden group bg-gradient-to-br from-gray-900 to-gray-800 border-brand-border/50 hover:border-green-500/50 transition-all duration-300">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <DollarSign size={80} />
           </div>
@@ -259,7 +270,7 @@ const MeusGanhos = () => {
           <div className="h-1 w-full bg-brand-dark mt-4">
             <div className="h-full bg-green-500 w-full opacity-50"></div>
           </div>
-        </Card>
+        </Card> */}
 
         <Card className="!p-0 relative overflow-hidden group bg-gradient-to-br from-gray-900 to-gray-800 border-brand-border/50 hover:border-brand-primary/50 transition-all duration-300 shadow-[0_0_15px_rgba(234,179,8,0.05)] hover:shadow-[0_0_20px_rgba(234,179,8,0.15)]">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">

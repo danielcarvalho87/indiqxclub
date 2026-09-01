@@ -138,10 +138,12 @@ const Usuarios = () => {
   };
 
   const filteredUsuarios = usuarios.filter((user) => {
-    if (userLevel === "FullAdmin" || userLevel === "Full Admin") {
-      return true; // Full Admin vê todos
-    }
-    return user.level === "Administrador" || user.level === "Admin";
+    return (
+      user.level === "Administrador" ||
+      user.level === "Admin" ||
+      user.level === "FullAdmin" ||
+      user.level === "Full Admin"
+    );
   });
 
   const isFullAdmin = userLevel === "FullAdmin" || userLevel === "Full Admin";
