@@ -1,5 +1,5 @@
 // src/auth/auth.service.ts
-import { Injectable, ConflictException, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { User } from "../user/entities/user.entity";
@@ -7,9 +7,14 @@ import { UserService } from "../user/user.service";
 import { UserPayload } from "./models/UserPayload";
 import { UserToken } from "./models/UserToken";
 import { UnauthorizedError } from "./errors/unauthorized.error";
-import { CreateUserPublicDto } from "./dto/create-user-public.dto";
 import { EmailService } from "../email/email.service";
 import { ConfiguracoesService } from "../configuracoes/configuracoes.service";
+
+/**
+ * Hash descartável usado para igualar o tempo de resposta quando o e-mail
+ * não existe, evitando enumeração de usuários por diferença de latência.
+ */
+const DUMMY_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.pM/xUdA9c4xVxCz0hLDGRUZ0kQ.C";
 
 @Injectable()
 export class AuthService {
@@ -19,10 +24,6 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly configuracoesService: ConfiguracoesService
   ) { }
-
-  // ============================================
-  // MÉTODOS EXISTENTES (sem alteração)
-  // ============================================
 
   login(user: User): UserToken {
     const payload: UserPayload = {
@@ -65,25 +66,38 @@ export class AuthService {
   }
 
   async validateUser(email: string, password: string): Promise<User> {
-    const user = await this.userService.findByEmail(email);
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    const user = await this.userService.findByEmail(normalizedEmail);
 
-    if (user) {
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-
-      if (isPasswordValid) {
-        return {
-          ...user,
-          password: undefined,
-        };
-      }
-    }
-    throw new UnauthorizedError(
-      "Email address or password provided is incorrect."
+    // Compara sempre, mesmo sem usuário, para manter o tempo de resposta
+    // constante entre e-mail existente e inexistente.
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user?.password || DUMMY_HASH
     );
+
+    if (!user || !isPasswordValid) {
+      throw new UnauthorizedError(
+        "Email address or password provided is incorrect."
+      );
+    }
+
+    // A checagem de status existia apenas no frontend, o que permitia
+    // autenticar contas inativas chamando POST /login diretamente.
+    if ((user.status || "").trim().toLowerCase() !== "ativo") {
+      throw new UnauthorizedError(
+        "Usuário inativo. Entre em contato com o suporte."
+      );
+    }
+
+    return {
+      ...user,
+      password: undefined,
+    };
   }
 
   // ============================================
-  // NOVOS MÉTODOS - Token Público de Registro
+  // Token Público de Registro
   // ============================================
 
   /**
@@ -98,9 +112,9 @@ export class AuthService {
     };
 
     const token = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || "sua-chave-secreta-super-segura",
+      secret: process.env.JWT_SECRET,
       expiresIn: "30m",
-      issuer: "saudeflow-app",
+      issuer: "indiqx-app",
       audience: "public-registration",
     });
 
@@ -129,70 +143,18 @@ export class AuthService {
    * Valida o token de registro
    */
   async validateRegisterToken(token: string): Promise<any> {
-    try {
-      const decoded = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || "sua-chave-secreta-super-segura",
-        audience: "public-registration",
-        issuer: "saudeflow-app",
-      });
+    const decoded = this.jwtService.verify(token, {
+      secret: process.env.JWT_SECRET,
+      audience: "public-registration",
+      issuer: "indiqx-app",
+    });
 
-      // Verificar se é um token de registro
-      if (decoded.type !== "register") {
-        throw new Error("Token inválido para esta operação");
-      }
-
-      return decoded;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Registra um novo usuário através do processo público
-   */
-  async registerPublicUser(createUserDto: CreateUserPublicDto) {
-    // Verificar se email já existe
-    const existingUser = await this.userService.findByEmail(
-      createUserDto.email
-    );
-    if (existingUser) {
-      throw new ConflictException("E-mail já cadastrado");
+    // Verificar se é um token de registro
+    if (decoded.type !== "register") {
+      throw new Error("Token inválido para esta operação");
     }
 
-    // Hash da senha
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-
-    // Preparar dados do usuário
-    const userData = {
-      name: createUserDto.name,
-      sobrenome: createUserDto.sobrenome,
-      email: createUserDto.email,
-      password: hashedPassword,
-      cpf: createUserDto.cpf,
-      telefone: createUserDto.telefone,
-      plano_id: createUserDto.plano_id,
-      level: createUserDto.level || "2",
-      status: createUserDto.status || "Inativo",
-      master_id: createUserDto.master_id || 0,
-      nascimento: createUserDto.nascimento,
-      sexo: createUserDto.sexo,
-      ecivil: createUserDto.ecivil,
-      especialidade: createUserDto.especialidade,
-      nconselho: createUserDto.nconselho,
-    };
-
-    // Criar usuário usando método específico para registro público
-    const user = await this.userService.createPublicUser(userData);
-
-    // Remover senha da resposta
-    const { password, ...userWithoutPassword } = user;
-
-    return {
-      success: true,
-      message: "Usuário registrado com sucesso",
-      user_id: userWithoutPassword.id,
-      id: userWithoutPassword.id,
-      user: userWithoutPassword,
-    };
+    return decoded;
   }
+
 }

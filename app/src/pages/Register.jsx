@@ -19,6 +19,8 @@ import { maskCPF, maskPhone, maskCEP } from "../utils/masks";
 import { API_URL } from "../api";
 import logoIndiqx from "../assets/LOGO-INDIQX.svg";
 
+const MIN_PASSWORD_LENGTH = 8;
+
 const Register = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,8 +54,8 @@ const Register = () => {
     localidade: "",
     uf: "",
     plano_id: 1, // Default plan
-    level: "Parceiro",
-    status: "Inativo",
+    // level e status nao sao enviados: o servidor sempre cria o cadastro
+    // como Parceiro/Inativo. Envia-los faria a API rejeitar a requisicao.
     master_id: refId ? Number(refId) : 0,
   });
 
@@ -77,7 +79,7 @@ const Register = () => {
     try {
       // Using API_URL to make a public call
       const response = await fetch(
-        `${API_URL}/configuracoes/master/${masterId}`,
+        `${API_URL}/configuracoes/publica/${masterId}`,
       );
       if (response.ok) {
         const json = await response.json();
@@ -98,13 +100,14 @@ const Register = () => {
       if (response.ok) {
         const data = await response.json();
         setRegisterToken(data.access_token);
-      } else {
-        toast.error("Erro ao iniciar sessão de cadastro.");
+        return data.access_token;
       }
+      toast.error("Erro ao iniciar sessão de cadastro.");
     } catch (error) {
       console.error("Erro ao buscar token:", error);
       toast.error("Erro de conexão.");
     }
+    return null;
   };
 
   const handleChange = (e) => {
@@ -148,8 +151,10 @@ const Register = () => {
       return;
     }
 
-    if (!registerToken) {
-      toast.error("Sessão expirada. Recarregue a página.");
+    if (formData.password.length < MIN_PASSWORD_LENGTH) {
+      toast.error(
+        `A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`,
+      );
       return;
     }
 
@@ -157,22 +162,43 @@ const Register = () => {
     try {
       const { confirmPassword, ...dataToSend } = formData;
 
-      const response = await fetch(`${API_URL}/public/user/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${registerToken}`,
-        },
-        body: JSON.stringify(dataToSend),
-      });
+      const enviar = (token) =>
+        fetch(`${API_URL}/public/user/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(dataToSend),
+        });
+
+      let token = registerToken || (await fetchRegisterToken());
+      if (!token) {
+        toast.error("Não foi possível iniciar o cadastro. Tente novamente.");
+        return;
+      }
+
+      let response = await enviar(token);
+
+      // O token de cadastro expira em 30 minutos; se o formulário ficou
+      // aberto por mais tempo, pega um novo e tenta uma única vez.
+      if (response.status === 401) {
+        token = await fetchRegisterToken();
+        if (token) {
+          response = await enviar(token);
+        }
+      }
 
       if (response.ok) {
         toast.success("Cadastro realizado com sucesso!");
-        toast.info("Aguarde a aprovação do administrador para acessar.");
+        toast.info("Verifique seu e-mail para validar sua conta.");
         navigate("/");
       } else {
-        const errorData = await response.json();
-        toast.error(errorData.message || "Erro ao realizar cadastro.");
+        const errorData = await response.json().catch(() => ({}));
+        const detalhe = Array.isArray(errorData.message)
+          ? errorData.message.join(", ")
+          : errorData.message;
+        toast.error(detalhe || "Erro ao realizar cadastro.");
       }
     } catch (error) {
       console.error("Erro no cadastro:", error);
@@ -469,6 +495,7 @@ const Register = () => {
                       placeholder="Senha *"
                       value={formData.password}
                       onChange={handleChange}
+                      minLength={MIN_PASSWORD_LENGTH}
                       required
                     />
                     <button
@@ -503,6 +530,9 @@ const Register = () => {
                     </button>
                   </div>
                 </div>
+                <p className="text-xs text-brand-muted">
+                  A senha deve ter no mínimo {MIN_PASSWORD_LENGTH} caracteres.
+                </p>
                 {formData.confirmPassword &&
                   formData.password !== formData.confirmPassword && (
                     <p className="text-red-500 text-sm">

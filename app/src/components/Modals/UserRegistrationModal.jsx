@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { X, Save } from "lucide-react";
+import { toast } from "react-toastify";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { maskCPF, maskPhone } from "../../utils/masks";
+
+const MIN_PASSWORD_LENGTH = 8;
 
 const UserRegistrationModal = ({
   isOpen,
@@ -111,6 +114,19 @@ const UserRegistrationModal = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // A API exige o mínimo em toda senha nova; validar aqui evita um 400.
+    const senhaInformada = (formData.password || "").trim();
+    if (
+      (!isEditing || senhaInformada) &&
+      senhaInformada.length < MIN_PASSWORD_LENGTH
+    ) {
+      toast.error(
+        `A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`,
+      );
+      return;
+    }
+
     if (onSubmit) {
       // Filtrar apenas os campos que pertencem ao formulário para evitar erro 400 no backend (ex: created_at)
       const dataToSubmit = {};

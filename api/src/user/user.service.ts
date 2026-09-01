@@ -2,14 +2,47 @@
 // Service de usuário com métodos para status online, último login, validação de e-mail e tipo de pessoa
 // Localização: src/user/user.service.ts
 
-import { Inject, Injectable, ConflictException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  ConflictException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { CreatePublicUserDto } from "./dto/create-public-user.dto";
 import { Repository, LessThan } from "typeorm";
 import { User } from "./entities/user.entity";
 import * as bcrypt from "bcrypt";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { EmailService } from "../email/email.service";
+import { isAdmin, isFullAdmin } from "../auth/roles/level.util";
+
+/**
+ * Campos que nunca devem sair da API: hash de senha e tokens de
+ * verificação/reset (que permitiriam assumir a conta).
+ */
+const SENSITIVE_FIELDS = [
+  "password",
+  "resetPasswordToken",
+  "resetPasswordExpires",
+  "email_verification_token",
+  "email_verification_expires",
+] as const;
+
+/** Remove campos sensíveis de um usuário (ou de uma lista deles). */
+export function sanitizeUser<T>(user: T): T;
+export function sanitizeUser<T>(user: T[]): T[];
+export function sanitizeUser(user: any): any {
+  if (!user) return user;
+  if (Array.isArray(user)) return user.map((item) => sanitizeUser(item));
+
+  const clean = { ...user };
+  for (const field of SENSITIVE_FIELDS) {
+    delete clean[field];
+  }
+  return clean;
+}
 
 @Injectable()
 export class UserService {
@@ -20,44 +53,103 @@ export class UserService {
   ) {}
 
   async create(createUserDto: CreateUserDto) {
+    const email = (createUserDto.email || "").trim().toLowerCase();
+
+    const existing = await this.findByEmail(email);
+    if (existing) {
+      throw new ConflictException("E-mail já cadastrado");
+    }
+
+    // As colunas de endereço são NOT NULL sem default no banco: omitir
+    // qualquer uma delas fazia o INSERT falhar com erro 500.
+    const enderecoPadrao = {
+      cep: createUserDto.cep ?? "",
+      logradouro: createUserDto.logradouro ?? "",
+      bairro: createUserDto.bairro ?? "",
+      complemento: createUserDto.complemento ?? "",
+      numero: createUserDto.numero ?? "",
+      localidade: createUserDto.localidade ?? "",
+      uf: createUserDto.uf ?? "",
+    };
+
     const data = {
       ...createUserDto,
-      password: await bcrypt.hash(createUserDto.password, 8),
+      ...enderecoPadrao,
+      email,
+      password: await bcrypt.hash(createUserDto.password, 10),
+      level: createUserDto.level || "Parceiro",
+      status: createUserDto.status || "Inativo",
       is_online: false,
       last_login: null,
       last_activity: null,
       tipo_pessoa: createUserDto.tipo_pessoa || "fisica",
     };
     const createdUser = await this.userRepository.save({ ...data });
-    return {
-      ...createdUser,
-      password: undefined,
-    };
+    return sanitizeUser(createdUser);
   }
 
-  findAll(user?: UserFromJwt) {
+  async findAll(user?: UserFromJwt) {
     if (!user) {
-      return this.userRepository.find();
+      return sanitizeUser(await this.userRepository.find());
     }
 
-    const isFullAdmin = ["FullAdmin", "Full Admin"].includes(user.level);
-    const isAdmin = ["Administrador", "Admin"].includes(user.level);
+    if (isFullAdmin(user.level)) {
+      return sanitizeUser(await this.userRepository.find());
+    }
 
-    if (isFullAdmin) {
-      return this.userRepository.find();
-    } else if (isAdmin) {
-      return this.userRepository.find({
-        where: [{ master_id: user.id }, { id: user.id }],
-      });
-    } else {
-      return this.userRepository.find({
+    if (isAdmin(user.level)) {
+      return sanitizeUser(
+        await this.userRepository.find({
+          where: [{ master_id: user.id }, { id: user.id }],
+        }),
+      );
+    }
+
+    return sanitizeUser(
+      await this.userRepository.find({
         where: { id: user.id },
-      });
-    }
+      }),
+    );
   }
 
-  findOne(id: number) {
+  /** Uso interno: retorna a entidade completa, incluindo campos sensíveis. */
+  findOneRaw(id: number) {
     return this.userRepository.findOne({ where: { id } });
+  }
+
+  async findOne(id: number) {
+    return sanitizeUser(await this.userRepository.findOne({ where: { id } }));
+  }
+
+  /**
+   * Verifica se `actor` pode ler/alterar o usuário `targetId`.
+   * FullAdmin: todos. Administrador: ele mesmo e seus parceiros.
+   * Parceiro: apenas ele mesmo.
+   */
+  async assertCanManage(actor: UserFromJwt, targetId: number): Promise<User> {
+    const target = await this.userRepository.findOne({
+      where: { id: targetId },
+    });
+
+    if (!target) {
+      return null;
+    }
+
+    if (isFullAdmin(actor.level)) {
+      return target;
+    }
+
+    if (Number(target.id) === Number(actor.id)) {
+      return target;
+    }
+
+    if (isAdmin(actor.level) && Number(target.master_id) === Number(actor.id)) {
+      return target;
+    }
+
+    throw new ForbiddenException(
+      "Você não tem permissão para acessar este usuário.",
+    );
   }
 
   async findOnePublic(id: number) {
@@ -76,7 +168,7 @@ export class UserService {
 
     // Só faz hash da senha se ela foi fornecida
     if (updateUserDto.password && updateUserDto.password.trim() !== "") {
-      data.password = await bcrypt.hash(updateUserDto.password, 8);
+      data.password = await bcrypt.hash(updateUserDto.password, 10);
     } else {
       // Remove o campo password se não foi fornecido ou está vazio
       delete data.password;
@@ -116,10 +208,7 @@ export class UserService {
       }
     }
 
-    return {
-      ...updatedUser,
-      password: undefined,
-    };
+    return sanitizeUser(updatedUser);
   }
 
   remove(id: number) {
@@ -129,7 +218,7 @@ export class UserService {
   async findByEmail(email: string) {
     return this.userRepository.findOne({
       where: {
-        email,
+        email: (email || "").trim().toLowerCase(),
       },
     });
   }
@@ -163,14 +252,38 @@ export class UserService {
   }
 
   /**
-   * Busca usuário pelo token de reset de senha
-   * @param token Token de reset
+   * Busca usuário pelo hash do token de reset de senha.
+   * O banco guarda o sha256 do token: o valor em claro só existe no link
+   * enviado por e-mail, então um vazamento da tabela não permite o reset.
    */
-  async findByResetToken(token: string): Promise<User | null> {
+  async findByResetTokenHash(tokenHash: string): Promise<User | null> {
+    if (!tokenHash) return null;
+
     return this.userRepository.findOne({
       where: {
-        resetPasswordToken: token,
+        resetPasswordToken: tokenHash,
       },
+    });
+  }
+
+  /** Grava o hash do token de reset e sua expiração. */
+  async setResetToken(
+    userId: number,
+    tokenHash: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.userRepository.update(userId, {
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: expiresAt,
+    });
+  }
+
+  /** Define uma nova senha e invalida o token de reset. */
+  async resetPassword(userId: number, plainPassword: string): Promise<void> {
+    await this.userRepository.update(userId, {
+      password: await bcrypt.hash(plainPassword, 10),
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
     });
   }
 
@@ -187,10 +300,7 @@ export class UserService {
     });
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    return {
-      ...user,
-      password: undefined,
-    } as User;
+    return sanitizeUser(user) as User;
   }
 
   /**
@@ -215,54 +325,32 @@ export class UserService {
   // ============================================
 
   async findLevel(level: string) {
-    return this.userRepository.find({
-      where: {
-        level: level,
-      },
-    });
+    return sanitizeUser(
+      await this.userRepository.find({
+        where: {
+          level: level,
+        },
+      }),
+    );
   }
 
   async getUsuarios(userId: number) {
-    return this.userRepository.find({
-      where: {
-        id: userId,
-      },
-    });
-  }
-
-  // Função para buscar usuários com níveis abaixo do master
-  async getUsuariosByMaster(masterId: number) {
-    return this.userRepository
-      .createQueryBuilder("user")
-      .where("user.level > :level", { level: 2 })
-      .andWhere("user.master_id = :masterId", { masterId })
-      .getMany();
-  }
-
-  // Função para listar usuários baseado no nível do usuário logado
-  async getUsuariosByUserLevel(userId: number, userLevel: number) {
-    if (userLevel === 1) {
-      // Admin vê todos os usuários
-      return this.userRepository.find();
-    } else if (userLevel === 2) {
-      // Level 2 vê:
-      // 1. Seu próprio perfil (level 2)
-      // 2. Usuários level 3 que ele gerencia (master_id = userId)
-      return this.userRepository
-        .createQueryBuilder("user")
-        .where(
-          "(user.id = :userId) OR (user.master_id = :userId AND user.level >= 3)",
-          { userId },
-        )
-        .getMany();
-    } else {
-      // Level 3 e outros veem apenas seu próprio usuário
-      return this.userRepository.find({
+    return sanitizeUser(
+      await this.userRepository.find({
         where: {
           id: userId,
         },
-      });
-    }
+      }),
+    );
+  }
+
+  // Função para buscar os parceiros vinculados a um master
+  async getUsuariosByMaster(masterId: number) {
+    return sanitizeUser(
+      await this.userRepository.find({
+        where: { master_id: masterId, level: "Parceiro" },
+      }),
+    );
   }
 
   // ============================================
@@ -283,10 +371,7 @@ export class UserService {
     });
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    return {
-      ...user,
-      password: undefined,
-    } as User;
+    return sanitizeUser(user) as User;
   }
 
   /**
@@ -300,10 +385,7 @@ export class UserService {
     });
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    return {
-      ...user,
-      password: undefined,
-    } as User;
+    return sanitizeUser(user) as User;
   }
 
   /**
@@ -332,10 +414,7 @@ export class UserService {
     await this.userRepository.update(userId, updateData);
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    return {
-      ...user,
-      password: undefined,
-    } as User;
+    return sanitizeUser(user) as User;
   }
 
   /**
@@ -359,10 +438,7 @@ export class UserService {
       ],
     });
 
-    return users.map((user) => ({
-      ...user,
-      password: undefined,
-    })) as User[];
+    return sanitizeUser(users) as User[];
   }
 
   /**
@@ -465,10 +541,7 @@ export class UserService {
     const stats = await this.getOnlineStats();
 
     return {
-      users: onlineUsers.map((user) => ({
-        ...user,
-        password: undefined,
-      })),
+      users: sanitizeUser(onlineUsers),
       stats,
     };
   }
@@ -478,51 +551,56 @@ export class UserService {
   // ============================================
 
   /**
-   * Método específico para criar usuário através do registro público
+   * Cria o usuário do cadastro público.
+   * Nível, status e flags de verificação são definidos aqui, nunca pelo
+   * corpo da requisição.
    */
-  async createPublicUser(userData: {
-    name: string;
-    sobrenome?: string;
-    email: string;
-    password: string;
-    cpf?: string;
-    telefone?: string;
-    plano_id: number;
-    level?: string;
-    status?: string;
-    master_id?: number;
-    nascimento?: string;
-    sexo?: string;
-    ecivil?: string;
-    especialidade?: string;
-    nconselho?: string;
-  }): Promise<User> {
+  async createPublicUser(
+    userData: CreatePublicUserDto & {
+      emailVerificationToken?: string;
+      emailVerificationExpires?: Date;
+    },
+  ): Promise<User> {
     const user = this.userRepository.create({
       name: userData.name,
       sobrenome: userData.sobrenome || "",
-      email: userData.email,
-      password: userData.password,
+      email: (userData.email || "").trim().toLowerCase(),
+      password: await bcrypt.hash(userData.password, 10),
       cpf: userData.cpf || "",
       telefone: userData.telefone || "",
-      plano_id: userData.plano_id,
-      level: userData.level || "2",
-      status: userData.status || "Inativo",
+      plano_id: userData.plano_id || 0,
       master_id: userData.master_id || 0,
       nascimento: userData.nascimento || "",
       sexo: userData.sexo || "",
       ecivil: userData.ecivil || "",
       especialidade: userData.especialidade || "",
       nconselho: userData.nconselho || "",
+      // Definidos pelo servidor: o parceiro entra inativo e só é liberado
+      // após confirmar o e-mail e ser aprovado pelo administrador.
+      level: "Parceiro",
+      status: "Inativo",
+      email_verified: false,
+      email_verification_token: userData.emailVerificationToken || null,
+      email_verification_expires: userData.emailVerificationExpires || null,
+      tipo_pessoa: userData.tipo_pessoa || "fisica",
+      razao_social: userData.razao_social || null,
+      cnpj: userData.cnpj || null,
+      cep: userData.cep || "",
+      logradouro: userData.logradouro || "",
+      bairro: userData.bairro || "",
+      complemento: userData.complemento || "",
+      numero: userData.numero || "",
+      localidade: userData.localidade || "",
+      uf: userData.uf || "",
       plano_expired: null,
       foto_perfil: null,
       foto_perfil_firebase_path: null,
-      // Novos campos
       is_online: false,
       last_login: null,
       last_activity: null,
     });
 
-    return await this.userRepository.save(user);
+    return this.userRepository.save(user);
   }
 
   // ============================================

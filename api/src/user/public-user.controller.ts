@@ -1,5 +1,5 @@
-// public-user.controller.ts (ATUALIZADO PARA LOCALHOST)
-// Controller público para registro de usuários e validação de e-mail
+// public-user.controller.ts
+// Controller público para registro de usuários, validação de e-mail e reset de senha
 // Localização: src/user/public-user.controller.ts
 
 import {
@@ -8,13 +8,23 @@ import {
   Body,
   HttpException,
   HttpStatus,
+  UseGuards,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { UserService } from "./user.service";
-import { CreateUserDto } from "./dto/create-user.dto";
+import { CreatePublicUserDto } from "./dto/create-public-user.dto";
 import { EmailService } from "../email/email.service";
 import { ConfiguracoesService } from "../configuracoes/configuracoes.service";
 import * as crypto from "crypto";
 import { IsPublic } from "../auth/decorators/is-public.decorator";
+import { RegisterTokenGuard } from "../auth/guards/register-token.guard";
+
+const MIN_PASSWORD_LENGTH = 8;
+
+/** Hash do token guardado no banco; o valor em claro só vai no e-mail. */
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 @IsPublic()
 @Controller("public/user")
@@ -26,20 +36,27 @@ export class PublicUserController {
   ) {}
 
   /**
-   * Registro público de usuário
+   * Registro público de usuário (parceiro)
    * POST /public/user/register
+   *
+   * Nível, status e flags de verificação são definidos pelo servidor.
+   * O corpo da requisição nunca decide o nível de acesso.
    */
   @Post("register")
-  async register(@Body() createUserDto: CreateUserDto) {
+  @UseGuards(RegisterTokenGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async register(@Body() createUserDto: CreatePublicUserDto) {
     try {
+      const email = createUserDto.email.trim().toLowerCase();
+
       // Validar se o e-mail já existe
-      const existingUser = await this.userService.findByEmail(
-        createUserDto.email,
-      );
+      const existingUser = await this.userService.findByEmail(email);
 
       if (existingUser) {
         throw new HttpException("E-mail já cadastrado", HttpStatus.BAD_REQUEST);
       }
+
+      let cnpjLimpo: string | undefined;
 
       // Validar campos obrigatórios conforme tipo de pessoa
       if (createUserDto.tipo_pessoa === "juridica") {
@@ -51,7 +68,7 @@ export class PublicUserController {
         }
 
         // Remover formatação do CNPJ antes de validar
-        const cnpjLimpo = createUserDto.cnpj.replace(/\D/g, "");
+        cnpjLimpo = createUserDto.cnpj.replace(/\D/g, "");
 
         // Validar se CNPJ já existe
         const existingCnpj = await this.userService.findByCnpj(cnpjLimpo);
@@ -59,9 +76,6 @@ export class PublicUserController {
         if (existingCnpj) {
           throw new HttpException("CNPJ já cadastrado", HttpStatus.BAD_REQUEST);
         }
-
-        // Salvar CNPJ limpo
-        createUserDto.cnpj = cnpjLimpo;
       }
 
       // Gerar token de validação de e-mail (válido por 24 horas)
@@ -69,27 +83,18 @@ export class PublicUserController {
       const tokenExpiration = new Date();
       tokenExpiration.setHours(tokenExpiration.getHours() + 24);
 
-      // Criar usuário com status Inativo
-      const userData: CreateUserDto = {
+      // Cria o usuário sempre como Parceiro inativo, aguardando a
+      // confirmação de e-mail e a aprovação do administrador.
+      const user = await this.userService.createPublicUser({
         ...createUserDto,
-        status: "Inativo",
-        level: createUserDto.level || "2",
-        master_id: createUserDto.master_id || 0,
-        plano_id: createUserDto.plano_id || 0,
-        email_verified: false,
-        email_verification_token: emailToken,
-        email_verification_expires: tokenExpiration,
-        tipo_pessoa: createUserDto.tipo_pessoa || "fisica",
-      };
+        email,
+        cnpj: cnpjLimpo ?? createUserDto.cnpj,
+        emailVerificationToken: emailToken,
+        emailVerificationExpires: tokenExpiration,
+      });
 
-      // Criar usuário
-      const user = await this.userService.create(userData);
-
-      // ✅ URL do Frontend: Usa a variável de ambiente, ou 'https://indiqx.club' em produção
       const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const confirmationUrl = `${frontendUrl}/confirm-email?token=${emailToken}`;
-
-      console.log("📧 URL de confirmação gerada:", confirmationUrl);
 
       await this.emailService.sendEmailVerification(
         user.email,
@@ -126,11 +131,11 @@ export class PublicUserController {
         user_id: user.id,
       };
     } catch (error) {
-      console.error("Erro ao registrar usuário:", error);
-
       if (error instanceof HttpException) {
         throw error;
       }
+
+      console.error("Erro ao registrar usuário:", error);
 
       throw new HttpException(
         "Erro ao realizar cadastro",
@@ -144,6 +149,7 @@ export class PublicUserController {
    * POST /public/user/confirm-email
    */
   @Post("confirm-email")
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async confirmEmail(@Body() body: { token: string }) {
     try {
       const { token } = body;
@@ -166,7 +172,10 @@ export class PublicUserController {
       }
 
       // Verificar se o token já expirou
-      if (new Date() > user.email_verification_expires) {
+      if (
+        !user.email_verification_expires ||
+        new Date() > user.email_verification_expires
+      ) {
         throw new HttpException("Token expirado", HttpStatus.BAD_REQUEST);
       }
 
@@ -208,11 +217,11 @@ export class PublicUserController {
         userId: user.id,
       };
     } catch (error) {
-      console.error("Erro ao confirmar e-mail:", error);
-
       if (error instanceof HttpException) {
         throw error;
       }
+
+      console.error("Erro ao confirmar e-mail:", error);
 
       throw new HttpException(
         "Erro ao validar e-mail",
@@ -224,25 +233,23 @@ export class PublicUserController {
   /**
    * Reenviar e-mail de validação
    * POST /public/user/resend-verification
+   *
+   * Responde sempre da mesma forma para não revelar quais e-mails existem.
    */
   @Post("resend-verification")
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   async resendVerification(@Body() body: { email: string }) {
+    const genericResponse = {
+      success: true,
+      message:
+        "Se o e-mail estiver cadastrado e pendente de validação, o link será reenviado.",
+    };
+
     try {
-      const { email } = body;
+      const user = await this.userService.findByEmail(body?.email || "");
 
-      // Buscar usuário pelo e-mail
-      const user = await this.userService.findByEmail(email);
-
-      if (!user) {
-        throw new HttpException("Usuário não encontrado", HttpStatus.NOT_FOUND);
-      }
-
-      // Verificar se o e-mail já foi validado
-      if (user.email_verified) {
-        throw new HttpException(
-          "E-mail já foi validado",
-          HttpStatus.BAD_REQUEST,
-        );
+      if (!user || user.email_verified) {
+        return genericResponse;
       }
 
       // Gerar novo token de validação
@@ -250,7 +257,6 @@ export class PublicUserController {
       const tokenExpiration = new Date();
       tokenExpiration.setHours(tokenExpiration.getHours() + 24);
 
-      // Atualizar token do usuário
       await this.userService.updateEmailVerificationToken(
         user.id,
         emailToken,
@@ -260,29 +266,16 @@ export class PublicUserController {
       const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const confirmationUrl = `${frontendUrl}/confirm-email?token=${emailToken}`;
 
-      console.log("📧 URL de reenvio gerada:", confirmationUrl);
-
       await this.emailService.sendEmailVerification(
         user.email,
         user.name,
         confirmationUrl,
       );
 
-      return {
-        success: true,
-        message: "E-mail de validação reenviado com sucesso",
-      };
+      return genericResponse;
     } catch (error) {
       console.error("Erro ao reenviar e-mail de validação:", error);
-
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
-      throw new HttpException(
-        "Erro ao reenviar e-mail",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      return genericResponse;
     }
   }
 
@@ -291,29 +284,30 @@ export class PublicUserController {
    * POST /public/user/forgot-password
    */
   @Post("forgot-password")
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   async forgotPassword(@Body() body: { email: string }) {
+    // Resposta única: não revela quais e-mails estão cadastrados.
+    const genericResponse = {
+      success: true,
+      message: "Se o e-mail existir, um link de redefinição será enviado.",
+    };
+
     try {
-      const { email } = body;
-      const user = await this.userService.findByEmail(email);
+      const user = await this.userService.findByEmail(body?.email || "");
 
       if (!user) {
-        // Não retornar erro para não expor quais e-mails estão cadastrados
-        return {
-          success: true,
-          message: "Se o e-mail existir, um link de redefinição será enviado.",
-        };
+        return genericResponse;
       }
 
-      // Gerar token de reset
+      // Token em claro vai no e-mail; o banco guarda apenas o hash.
       const resetToken = crypto.randomBytes(32).toString("hex");
-      const tokenExpiration = new Date();
-      tokenExpiration.setHours(tokenExpiration.getHours() + 1); // 1 hora de validade
+      const tokenExpiration = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
-      // Atualizar usuário com o token
-      await this.userService.update(user.id, {
-        resetPasswordToken: resetToken,
-        resetPasswordExpires: tokenExpiration,
-      } as any);
+      await this.userService.setResetToken(
+        user.id,
+        hashToken(resetToken),
+        tokenExpiration,
+      );
 
       const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const resetUrl = `${frontendUrl}/reset?token=${resetToken}`;
@@ -324,16 +318,10 @@ export class PublicUserController {
         resetUrl,
       );
 
-      return {
-        success: true,
-        message: "Se o e-mail existir, um link de redefinição será enviado.",
-      };
+      return genericResponse;
     } catch (error) {
       console.error("Erro ao solicitar redefinição de senha:", error);
-      throw new HttpException(
-        "Erro ao solicitar redefinição de senha",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      return genericResponse;
     }
   }
 
@@ -342,6 +330,7 @@ export class PublicUserController {
    * POST /public/user/reset-password
    */
   @Post("reset-password")
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async resetPassword(@Body() body: { token: string; password: string }) {
     try {
       const { token, password } = body;
@@ -353,7 +342,16 @@ export class PublicUserController {
         );
       }
 
-      const user = await this.userService.findByResetToken(token);
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        throw new HttpException(
+          `A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const user = await this.userService.findByResetTokenHash(
+        hashToken(token),
+      );
 
       if (
         !user ||
@@ -366,28 +364,29 @@ export class PublicUserController {
         );
       }
 
-      // Atualizar a senha (o hash é feito no userService.update)
-      await this.userService.update(user.id, {
-        password: password,
-        resetPasswordToken: null,
-        resetPasswordExpires: null,
-      } as any);
+      await this.userService.resetPassword(user.id, password);
 
-      // Enviar e-mail de confirmação
-      await this.emailService.sendPasswordChangedConfirmation(
-        user.email,
-        user.name,
-      );
+      // Enviar e-mail de confirmação (não bloqueia o fluxo se falhar)
+      try {
+        await this.emailService.sendPasswordChangedConfirmation(
+          user.email,
+          user.name,
+        );
+      } catch (emailError) {
+        console.log("E-mail de confirmação não pôde ser enviado:", emailError);
+      }
 
       return {
         success: true,
         message: "Senha alterada com sucesso",
       };
     } catch (error) {
-      console.error("Erro ao redefinir senha:", error);
       if (error instanceof HttpException) {
         throw error;
       }
+
+      console.error("Erro ao redefinir senha:", error);
+
       throw new HttpException(
         "Erro ao redefinir senha",
         HttpStatus.INTERNAL_SERVER_ERROR,

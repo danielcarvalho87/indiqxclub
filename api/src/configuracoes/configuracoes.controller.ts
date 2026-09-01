@@ -6,7 +6,7 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
+  ForbiddenException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -18,17 +18,24 @@ import { ConfiguracoesService } from "./configuracoes.service";
 import { CreateConfiguracaoDto } from "./dto/create-configuracao.dto";
 import { UpdateConfiguracaoDto } from "./dto/update-configuracao.dto";
 import { Configuracao } from "./entities/configuracao.entity";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { IsPublic } from "../auth/decorators/is-public.decorator";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { UserFromJwt } from "../auth/models/UserFromJwt";
+import { Roles } from "../auth/roles/roles.decorator";
+import {
+  AccessLevel,
+  isFullAdmin,
+  isParceiro,
+} from "../auth/roles/level.util";
 
 @ApiTags("configuracoes")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller("configuracoes")
 export class ConfiguracoesController {
   constructor(private readonly configuracoesService: ConfiguracoesService) {}
 
   @Post()
+  @Roles(AccessLevel.FullAdmin, AccessLevel.Admin)
   @ApiOperation({ summary: "Criar nova configuração" })
   @ApiResponse({
     status: 201,
@@ -37,11 +44,13 @@ export class ConfiguracoesController {
   })
   create(
     @Body() createConfiguracaoDto: CreateConfiguracaoDto,
+    @CurrentUser() user: UserFromJwt,
   ): Promise<Configuracao> {
-    return this.configuracoesService.create(createConfiguracaoDto);
+    return this.configuracoesService.create(createConfiguracaoDto, user);
   }
 
   @Get()
+  @Roles(AccessLevel.FullAdmin)
   @ApiOperation({ summary: "Listar todas as configurações" })
   @ApiResponse({
     status: 200,
@@ -52,6 +61,40 @@ export class ConfiguracoesController {
     return this.configuracoesService.findAll();
   }
 
+  /**
+   * Dados públicos da empresa, usados na tela de cadastro de parceiros
+   * (/register?ref=:masterId). Expõe apenas o nome da empresa.
+   */
+  @Get("publica/:masterId")
+  @IsPublic()
+  @ApiOperation({ summary: "Dados públicos de exibição da empresa" })
+  findPublicByMasterId(@Param("masterId") masterId: string) {
+    return this.configuracoesService.findPublicByMasterId(+masterId);
+  }
+
+  @Get("master/:masterId")
+  @ApiOperation({ summary: "Buscar configurações por master ID" })
+  @ApiResponse({
+    status: 200,
+    description: "Lista de configurações do master",
+    type: [Configuracao],
+  })
+  findByMasterId(
+    @Param("masterId") masterId: string,
+    @CurrentUser() user: UserFromJwt,
+  ): Promise<Configuracao[]> {
+    // Administrador vê a própria empresa; parceiro, a empresa a que pertence.
+    const escopo = isParceiro(user.level) ? user.master_id : user.id;
+
+    if (!isFullAdmin(user.level) && Number(masterId) !== Number(escopo)) {
+      throw new ForbiddenException(
+        "Você não tem permissão para acessar estas configurações.",
+      );
+    }
+
+    return this.configuracoesService.findByMasterId(+masterId);
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Buscar configuração por ID" })
   @ApiResponse({
@@ -60,23 +103,15 @@ export class ConfiguracoesController {
     type: Configuracao,
   })
   @ApiResponse({ status: 404, description: "Configuração não encontrada" })
-  findOne(@Param("id") id: string): Promise<Configuracao> {
-    return this.configuracoesService.findOne(+id);
-  }
-
-  @Get("master/:masterId")
-  @IsPublic()
-  @ApiOperation({ summary: "Buscar configurações por master ID" })
-  @ApiResponse({
-    status: 200,
-    description: "Lista de configurações do master",
-    type: [Configuracao],
-  })
-  findByMasterId(@Param("masterId") masterId: string): Promise<Configuracao[]> {
-    return this.configuracoesService.findByMasterId(+masterId);
+  findOne(
+    @Param("id") id: string,
+    @CurrentUser() user: UserFromJwt,
+  ): Promise<Configuracao> {
+    return this.configuracoesService.findOne(+id, user);
   }
 
   @Patch(":id")
+  @Roles(AccessLevel.FullAdmin, AccessLevel.Admin)
   @ApiOperation({ summary: "Atualizar configuração" })
   @ApiResponse({
     status: 200,
@@ -87,18 +122,23 @@ export class ConfiguracoesController {
   update(
     @Param("id") id: string,
     @Body() updateConfiguracaoDto: UpdateConfiguracaoDto,
+    @CurrentUser() user: UserFromJwt,
   ): Promise<Configuracao> {
-    return this.configuracoesService.update(+id, updateConfiguracaoDto);
+    return this.configuracoesService.update(+id, updateConfiguracaoDto, user);
   }
 
   @Delete(":id")
+  @Roles(AccessLevel.FullAdmin, AccessLevel.Admin)
   @ApiOperation({ summary: "Remover configuração" })
   @ApiResponse({
     status: 204,
     description: "Configuração removida com sucesso",
   })
   @ApiResponse({ status: 404, description: "Configuração não encontrada" })
-  remove(@Param("id") id: string): Promise<void> {
-    return this.configuracoesService.remove(+id);
+  remove(
+    @Param("id") id: string,
+    @CurrentUser() user: UserFromJwt,
+  ): Promise<void> {
+    return this.configuracoesService.remove(+id, user);
   }
 }

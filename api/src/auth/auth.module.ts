@@ -7,7 +7,6 @@ import { JwtModule } from "@nestjs/jwt";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LoginValidationMiddleware } from "./middlewares/login-validation.middleware";
-import { RegisterTokenGuard } from "./guards/register-token.guard";
 import { EmailModule } from "../email/email.module";
 import { ConfiguracoesModule } from "../configuracoes/configuracoes.module";
 
@@ -27,8 +26,8 @@ import { ConfiguracoesModule } from "../configuracoes/configuracoes.module";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, RegisterTokenGuard],
-  exports: [AuthService, RegisterTokenGuard],
+  providers: [AuthService, LocalStrategy, JwtStrategy],
+  exports: [AuthService],
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

@@ -1,20 +1,16 @@
-// app.controller.ts - CORRIGIDO
+// app.controller.ts
 import { Controller, Get } from "@nestjs/common";
 import { AppService } from "./app.service";
-import { CurrentUser } from "./auth/decorators/current-user.decorator";
-import { User } from "./user/entities/user.entity";
+import { IsPublic } from "./auth/decorators/is-public.decorator";
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  /** Health check público (usado por monitoramento / Heroku). */
   @Get()
+  @IsPublic()
   getHello(): string {
     return this.appService.getHello();
-  }
-
-  @Get("user/auth")
-  getUser(@CurrentUser() user: User) {
-    return user;
   }
 }

@@ -4,7 +4,6 @@
 
 import { Module } from "@nestjs/common";
 import { MailerModule } from "@nestjs-modules/mailer";
-import { JwtModule } from "@nestjs/jwt";
 import { EmailService } from "./email.service";
 import { EmailController } from "./email.controller";
 import { DatabaseModule } from "../database/database.module";
@@ -13,10 +12,6 @@ import { userProviders } from "../user/user.provider";
 @Module({
   imports: [
     DatabaseModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || "indiqxclub-secret-key",
-      signOptions: { expiresIn: "1h" },
-    }),
     MailerModule.forRoot({
       transport: {
         host: process.env.SMTP_HOST,

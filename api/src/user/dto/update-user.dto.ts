@@ -5,23 +5,17 @@
 import { PartialType } from "@nestjs/swagger";
 import { CreateUserDto } from "./create-user.dto";
 import {
-  IsDateString,
   IsEmail,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
-  IsBoolean,
-  IsEnum,
+  MaxLength,
+  MinLength,
 } from "class-validator";
 import { Type, Transform } from "class-transformer";
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
-  @IsOptional()
-  @IsNumber({}, { message: "ID deve ser um número" })
-  @Type(() => Number)
-  @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))
-  id?: number;
-
   @IsNumber()
   @IsOptional()
   @Type(() => Number)
@@ -82,6 +76,8 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
   @IsString()
   @IsOptional()
+  @MinLength(8, { message: "A senha deve ter no mínimo 8 caracteres" })
+  @MaxLength(72, { message: "A senha deve ter no máximo 72 caracteres" })
   password?: string;
 
   @IsString()
@@ -101,28 +97,6 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   foto_perfil_firebase_path?: string;
 
-  // Status Online
-  @IsBoolean()
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (typeof value === "string") {
-      return value === "true" || value === "1";
-    }
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    return Boolean(value);
-  })
-  is_online?: boolean;
-
-  @IsDateString()
-  @IsOptional()
-  last_login?: Date;
-
-  @IsDateString()
-  @IsOptional()
-  last_activity?: Date;
-
   // Pessoa Jurídica
   @IsEnum(["fisica", "juridica"])
   @IsOptional()
@@ -135,31 +109,6 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsString()
   @IsOptional()
   cnpj?: string;
-
-  // Validação de E-mail
-  @IsBoolean()
-  @IsOptional()
-  email_verified?: boolean;
-
-  @IsString()
-  @IsOptional()
-  email_verification_token?: string;
-
-  @IsDateString()
-  @IsOptional()
-  email_verification_expires?: Date;
-
-  // ============================================
-  // CAMPOS - Reset de Senha (NOVOS)
-  // ============================================
-
-  @IsString()
-  @IsOptional()
-  resetPasswordToken?: string | null;
-
-  @IsDateString()
-  @IsOptional()
-  resetPasswordExpires?: Date | null;
 
   // ============================================
   // CAMPOS - Endereço do Usuário
@@ -193,9 +142,4 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   uf?: string;
 
-  // ============================================
-
-  @IsDateString()
-  @IsOptional()
-  updated_at?: Date;
 }

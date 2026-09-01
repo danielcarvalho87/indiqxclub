@@ -7,6 +7,8 @@ import { Input } from "../components/ui/Input";
 import { API_URL } from "../api";
 import logoIndiqx from "../assets/indiqx-logo-w.png";
 
+const MIN_PASSWORD_LENGTH = 8;
+
 const Reset = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -75,8 +77,10 @@ const Reset = () => {
       return;
     }
 
-    if (newPassword.length < 6) {
-      toast.error("A senha deve ter no mínimo 6 caracteres.");
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      toast.error(
+        `A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`,
+      );
       return;
     }
 
@@ -121,7 +125,8 @@ const Reset = () => {
           </h2>
           <p className="mt-2 text-sm text-brand-muted">
             {step === 1 && "Informe seu e-mail para receber as instruções"}
-            {step === 2 && "Crie uma nova senha para sua conta"}
+            {step === 2 &&
+              `Crie uma nova senha para sua conta (mínimo de ${MIN_PASSWORD_LENGTH} caracteres)`}
             {step === 3 && "Verifique sua caixa de entrada"}
           </p>
         </div>
@@ -166,6 +171,7 @@ const Reset = () => {
                 <Input
                   type={showPassword ? "text" : "password"}
                   placeholder="Nova Senha"
+                  minLength={MIN_PASSWORD_LENGTH}
                   className="pl-10 pr-10 bg-brand-dark border-brand-border text-brand-text focus:border-brand-primary"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}

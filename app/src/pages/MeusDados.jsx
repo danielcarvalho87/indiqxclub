@@ -10,6 +10,8 @@ import { maskCPF, maskPhone } from "../utils/masks";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
+const MIN_PASSWORD_LENGTH = 8;
+
 const MeusDados = () => {
   const { userId, data: userData, userLogin } = useAuth(); // userLogin might be needed to refresh token if password changes? No.
   const [loading, setLoading] = useState(false);
@@ -130,34 +132,42 @@ const MeusDados = () => {
     const token = localStorage.getItem("token");
 
     try {
-      const payload = { ...formData };
+      // Envia apenas os campos do formulário. Espalhar o objeto do usuário
+      // inteiro levava junto campos que a API não aceita (status online,
+      // flags de verificação) e que não pertencem à edição de perfil.
+      const payload = {};
+      Object.keys(defaultFormState).forEach((key) => {
+        if (formData[key] !== undefined && formData[key] !== null) {
+          payload[key] = formData[key];
+        }
+      });
 
-      // Remove password if empty to avoid overwriting with empty string
+      // Senha em branco significa "manter a atual"
       if (!payload.password) {
         delete payload.password;
+      } else if (payload.password.length < MIN_PASSWORD_LENGTH) {
+        toast.error(
+          `A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`,
+        );
+        setLoading(false);
+        return;
       }
 
-      // Remove fields that shouldn't be updated by user if necessary (e.g. level, status)
-      // Assuming backend handles protection or we just don't send them if they are in defaultFormState but not in form
-      // Actually we initialized formData with user data which includes level/status.
-      // We should probably exclude them from the payload if we want to be safe,
-      // but if the backend ignores them for non-admins it's fine.
-      // Let's remove sensitive fields just in case.
-      delete payload.level;
-      delete payload.status;
-      delete payload.id;
-      delete payload.created_at;
-      delete payload.updated_at;
+      // O e-mail é somente leitura nesta tela
+      delete payload.email;
 
       const { url, options } = PUT_USER(userId, payload, token);
       const response = await fetch(url, options);
 
       if (response.ok) {
         toast.success("Dados atualizados com sucesso!");
-        // Optionally refresh context
+        setFormData((prev) => ({ ...prev, password: "" }));
       } else {
-        const err = await response.json();
-        toast.error(err.message || "Erro ao atualizar dados.");
+        const err = await response.json().catch(() => ({}));
+        const detalhe = Array.isArray(err.message)
+          ? err.message.join(", ")
+          : err.message;
+        toast.error(detalhe || "Erro ao atualizar dados.");
       }
     } catch (error) {
       console.error("Erro ao salvar:", error);
@@ -399,7 +409,11 @@ const MeusDados = () => {
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="********"
+                minLength={MIN_PASSWORD_LENGTH}
               />
+              <p className="mt-1 text-xs text-brand-muted">
+                Mínimo de {MIN_PASSWORD_LENGTH} caracteres.
+              </p>
             </div>
           </div>
         </Card>

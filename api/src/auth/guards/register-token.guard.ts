@@ -1,4 +1,8 @@
 // src/auth/guards/register-token.guard.ts
+// Valida o token temporário emitido por POST /public/register-token.
+// Autônomo (não depende do AuthModule) para poder ser usado pelo
+// PublicUserController, que vive no UserModule.
+
 import {
   Injectable,
   CanActivate,
@@ -6,13 +10,13 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from "@nestjs/common";
-import { AuthService } from "../auth.service";
+import { JwtService } from "@nestjs/jwt";
 
 @Injectable()
 export class RegisterTokenGuard implements CanActivate {
-  constructor(private readonly authService: AuthService) {}
+  private readonly jwtService = new JwtService({});
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers.authorization;
 
@@ -23,10 +27,23 @@ export class RegisterTokenGuard implements CanActivate {
     const token = authHeader.substring(7); // Remove "Bearer "
 
     try {
-      const decoded = await this.authService.validateRegisterToken(token);
+      const decoded = this.jwtService.verify(token, {
+        secret: process.env.JWT_SECRET,
+        audience: "public-registration",
+        issuer: "indiqx-app",
+      });
+
+      if (decoded.type !== "register") {
+        throw new ForbiddenException("Token inválido para esta operação");
+      }
+
       request.registerToken = decoded;
       return true;
     } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
       if (error.name === "TokenExpiredError") {
         throw new UnauthorizedException({
           message: "Token expirado. Solicite um novo token.",
@@ -34,11 +51,7 @@ export class RegisterTokenGuard implements CanActivate {
         });
       }
 
-      if (error.name === "JsonWebTokenError") {
-        throw new UnauthorizedException("Token inválido");
-      }
-
-      throw new ForbiddenException(error.message || "Acesso negado");
+      throw new UnauthorizedException("Token inválido");
     }
   }
 }

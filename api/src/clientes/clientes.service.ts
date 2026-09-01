@@ -2,7 +2,7 @@ import {
   Injectable,
   Inject,
   NotFoundException,
-  UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { Repository } from "typeorm";
 import { Cliente } from "./entities/cliente.entity";
@@ -11,6 +11,7 @@ import { UpdateClienteDto } from "./dto/update-cliente.dto";
 import { EmailService } from "../email/email.service";
 import { UserService } from "../user/user.service";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
+import { isAdmin, isFullAdmin } from "../auth/roles/level.util";
 
 @Injectable()
 export class ClientesService {
@@ -21,17 +22,106 @@ export class ClientesService {
     private readonly userService: UserService,
   ) {}
 
+  /**
+   * Resolve qual corretor pode ser vinculado a um cliente.
+   * Parceiro só cadastra em nome próprio; Administrador, em nome dele ou de
+   * um parceiro vinculado; FullAdmin, de qualquer um.
+   */
+  private async resolveCorretorId(
+    corretorId: number | undefined,
+    user: UserFromJwt,
+  ): Promise<number> {
+    if (!isFullAdmin(user.level) && !isAdmin(user.level)) {
+      return user.id;
+    }
+
+    if (!corretorId || Number(corretorId) === Number(user.id)) {
+      return user.id;
+    }
+
+    if (isFullAdmin(user.level)) {
+      return Number(corretorId);
+    }
+
+    const corretor = await this.userService.findOneRaw(Number(corretorId));
+
+    if (!corretor || Number(corretor.master_id) !== Number(user.id)) {
+      throw new ForbiddenException(
+        "Você só pode vincular clientes a parceiros da sua empresa.",
+      );
+    }
+
+    return Number(corretorId);
+  }
+
+  /**
+   * Query base dos clientes.
+   * O corretor é trazido com uma seleção explícita: carregar a relação
+   * inteira devolvia o registro completo do usuário (hash de senha, tokens
+   * de reset e CPF) dentro de toda listagem de clientes.
+   */
+  private baseQuery() {
+    return this.clienteRepository
+      .createQueryBuilder("cliente")
+      .leftJoin("cliente.corretor", "corretor")
+      .addSelect([
+        "corretor.id",
+        "corretor.name",
+        "corretor.sobrenome",
+        "corretor.master_id",
+      ]);
+  }
+
+  /** Carrega o cliente garantindo que ele esteja no escopo do usuário. */
+  private async findScoped(id: number, user: UserFromJwt): Promise<Cliente> {
+    const cliente = await this.baseQuery()
+      .where("cliente.id = :id", { id })
+      .getOne();
+
+    if (!cliente) {
+      throw new NotFoundException("Cliente não encontrado");
+    }
+
+    if (isFullAdmin(user.level)) {
+      return cliente;
+    }
+
+    if (Number(cliente.corretor_id) === Number(user.id)) {
+      return cliente;
+    }
+
+    if (
+      isAdmin(user.level) &&
+      cliente.corretor &&
+      Number(cliente.corretor.master_id) === Number(user.id)
+    ) {
+      return cliente;
+    }
+
+    throw new ForbiddenException(
+      "Você não tem permissão para acessar este cliente.",
+    );
+  }
+
   async create(createClienteDto: CreateClienteDto, user: UserFromJwt) {
-    const novoCliente = await this.clienteRepository.save(createClienteDto);
+    const corretorId = await this.resolveCorretorId(
+      createClienteDto.corretor_id,
+      user,
+    );
+
+    const novoCliente = await this.clienteRepository.save({
+      ...createClienteDto,
+      corretor_id: corretorId,
+    });
 
     // Enviar notificação de novo cliente indicado
     if (novoCliente.corretor_id) {
       try {
-        const parceiro = await this.userService.findOne(
+        const parceiro = await this.userService.findOneRaw(
           novoCliente.corretor_id,
         );
         if (parceiro && parceiro.master_id) {
-          const admin = await this.userService.findOne(parceiro.master_id);
+          const admin = await this.userService.findOneRaw(parceiro.master_id);
           if (admin && admin.email) {
             const clienteNome =
               `${novoCliente.nome} ${novoCliente.sobrenome || ""}`.trim();
@@ -54,56 +144,55 @@ export class ClientesService {
   }
 
   async findAll(user: UserFromJwt) {
-    const isFullAdmin = ["FullAdmin", "Full Admin"].includes(user.level);
-    const isAdmin = ["Administrador", "Admin"].includes(user.level);
+    if (isFullAdmin(user.level)) {
+      return this.baseQuery().orderBy("cliente.created_at", "DESC").getMany();
+    }
 
-    if (isFullAdmin) {
-      return this.clienteRepository
-        .createQueryBuilder("cliente")
-        .leftJoinAndSelect("cliente.corretor", "corretor")
-        .orderBy("cliente.created_at", "DESC")
-        .getMany();
-    } else if (isAdmin) {
-      return this.clienteRepository
-        .createQueryBuilder("cliente")
-        .leftJoinAndSelect("cliente.corretor", "corretor")
+    if (isAdmin(user.level)) {
+      return this.baseQuery()
         .where("corretor.master_id = :userId", { userId: user.id })
         .orWhere("cliente.corretor_id = :userId", { userId: user.id })
         .orderBy("cliente.created_at", "DESC")
         .getMany();
-    } else {
-      return this.clienteRepository.find({
-        where: { corretor_id: user.id },
-        relations: ["corretor"],
-        order: { created_at: "DESC" },
-      });
     }
+
+    return this.baseQuery()
+      .where("cliente.corretor_id = :userId", { userId: user.id })
+      .orderBy("cliente.created_at", "DESC")
+      .getMany();
   }
 
-  findOne(id: number, user?: UserFromJwt) {
-    return this.clienteRepository.findOne({
-      where: { id },
-      relations: ["corretor"],
-    });
+  async findOne(id: number, user: UserFromJwt) {
+    return this.findScoped(id, user);
   }
 
   async update(
     id: number,
     updateClienteDto: UpdateClienteDto,
-    user?: UserFromJwt,
+    user: UserFromJwt,
   ) {
-    const clienteAntigo = await this.findOne(id);
-    const result = await this.clienteRepository.update(id, updateClienteDto);
+    const clienteAntigo = await this.findScoped(id, user);
+
+    const data: UpdateClienteDto = { ...updateClienteDto };
+
+    // Reatribuir o cliente a outro corretor exige permissão sobre o destino.
+    if (
+      data.corretor_id !== undefined &&
+      Number(data.corretor_id) !== Number(clienteAntigo.corretor_id)
+    ) {
+      data.corretor_id = await this.resolveCorretorId(data.corretor_id, user);
+    }
+
+    const result = await this.clienteRepository.update(id, data);
 
     // Se o status mudou para "Contrato fechado" e antes não era
     if (
-      updateClienteDto.status === "Contrato fechado" &&
-      clienteAntigo &&
+      data.status === "Contrato fechado" &&
       clienteAntigo.status !== "Contrato fechado"
     ) {
       try {
         const valorContrato =
-          updateClienteDto.valor_contrato || clienteAntigo.valor_contrato || 0;
+          data.valor_contrato || clienteAntigo.valor_contrato || 0;
         const clienteNome =
           `${clienteAntigo.nome} ${clienteAntigo.sobrenome || ""}`.trim();
 
@@ -111,9 +200,11 @@ export class ClientesService {
         let admin = null;
 
         if (clienteAntigo.corretor_id) {
-          parceiro = await this.userService.findOne(clienteAntigo.corretor_id);
+          parceiro = await this.userService.findOneRaw(
+            clienteAntigo.corretor_id,
+          );
           if (parceiro && parceiro.master_id) {
-            admin = await this.userService.findOne(parceiro.master_id);
+            admin = await this.userService.findOneRaw(parceiro.master_id);
           }
         }
 
@@ -144,7 +235,8 @@ export class ClientesService {
     return result;
   }
 
-  remove(id: number, user?: UserFromJwt) {
+  async remove(id: number, user: UserFromJwt) {
+    await this.findScoped(id, user);
     return this.clienteRepository.delete(id);
   }
 }

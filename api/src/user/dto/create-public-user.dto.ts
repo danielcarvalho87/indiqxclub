@@ -1,42 +1,47 @@
-// create-user.dto.ts (COMPLETO ATUALIZADO)
-// DTO de criação de usuário com validações para Pessoa Jurídica, e-mail e reset de senha
-// Localização: src/user/dto/create-user.dto.ts
+// create-public-user.dto.ts
+// DTO do cadastro público de parceiros
+// Localização: src/user/dto/create-public-user.dto.ts
+//
+// Não expõe level, status, email_verified nem tokens: esses campos são
+// definidos pelo servidor. Aceitá-los aqui permitiria que qualquer visitante
+// se cadastrasse como administrador.
 
 import {
   IsEmail,
+  IsEnum,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
-  IsEnum,
   MaxLength,
   MinLength,
   ValidateIf,
 } from "class-validator";
 import { Transform, Type } from "class-transformer";
 
-export class CreateUserDto {
+export class CreatePublicUserDto {
+  // Empresa (master) que originou o link de cadastro
   @IsNumber()
   @IsOptional()
   @Type(() => Number)
-  @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))
+  @Transform(({ value }) => (value ? parseInt(value, 10) : 0))
   master_id?: number;
 
   @IsNumber()
   @IsOptional()
   @Type(() => Number)
-  @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))
+  @Transform(({ value }) => (value ? parseInt(value, 10) : 0))
   plano_id?: number;
-
-  @IsString()
-  @IsOptional()
-  plano_expired?: string;
 
   // Dados pessoais
   @IsString()
+  @IsNotEmpty({ message: "Nome é obrigatório" })
+  @MaxLength(100)
   name: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(100)
   sobrenome?: string;
 
   @IsString()
@@ -68,53 +73,30 @@ export class CreateUserDto {
   nconselho?: string;
 
   // Dados de acesso
-  @IsEmail()
+  @IsEmail({}, { message: "E-mail inválido" })
+  @IsNotEmpty({ message: "E-mail é obrigatório" })
   email: string;
 
   @IsString()
+  @IsNotEmpty({ message: "Senha é obrigatória" })
   @MinLength(8, { message: "A senha deve ter no mínimo 8 caracteres" })
   @MaxLength(72, { message: "A senha deve ter no máximo 72 caracteres" })
   password: string;
 
-  @IsString()
-  @IsOptional()
-  level?: string;
-
-  @IsString()
-  @IsOptional()
-  status?: string;
-
-  // Foto de perfil
-  @IsString()
-  @IsOptional()
-  foto_perfil?: string;
-
-  @IsString()
-  @IsOptional()
-  foto_perfil_firebase_path?: string;
-
-  // ============================================
-  // CAMPOS - Pessoa Jurídica
-  // ============================================
-
+  // Pessoa Jurídica
   @IsEnum(["fisica", "juridica"])
   @IsOptional()
   tipo_pessoa?: "fisica" | "juridica";
 
-  // Razão Social - obrigatório se tipo_pessoa = 'juridica'
   @ValidateIf((o) => o.tipo_pessoa === "juridica")
   @IsString()
   razao_social?: string;
 
-  // CNPJ - obrigatório se tipo_pessoa = 'juridica'
   @ValidateIf((o) => o.tipo_pessoa === "juridica")
   @IsString()
   cnpj?: string;
 
-  // ============================================
-  // CAMPOS - Endereço do Usuário
-  // ============================================
-
+  // Endereço
   @IsString()
   @IsOptional()
   cep?: string;
@@ -141,5 +123,6 @@ export class CreateUserDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(2)
   uf?: string;
 }
