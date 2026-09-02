@@ -5,10 +5,15 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import UserRegistrationModal from "../components/Modals/UserRegistrationModal";
 import ConfirmModal from "../components/Modals/ConfirmModal";
-import { GET_USERS, POST_USER, PUT_USER, DELETE_USER } from "../api";
+import { GET_USERS_PAGINADO, POST_USER, PUT_USER, DELETE_USER } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import { useDebounce } from "../hooks/useDebounce";
+import { Pagination } from "../components/ui/Pagination";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
+const POR_PAGINA = 20;
 
 const Parceiros = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,38 +23,48 @@ const Parceiros = () => {
   const [selectedParceiro, setSelectedParceiro] = useState(null);
   const [parceiroToDelete, setParceiroToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [paginacao, setPaginacao] = useState({
+    page: 1,
+    totalPages: 1,
+    total: 0,
+    limit: POR_PAGINA,
+  });
 
   const { userLevel, userId } = useAuth();
+  const buscaAtrasada = useDebounce(searchTerm, 400);
 
-  const fetchParceiros = async () => {
+  const fetchParceiros = async (
+    pagina = paginacao.page,
+    busca = buscaAtrasada,
+  ) => {
     setLoading(true);
     try {
       const token = window.localStorage.getItem("token");
-      const { url, options } = GET_USERS(token);
-      const response = await fetch(url, options);
+      const { url, options } = GET_USERS_PAGINADO(
+        { page: pagina, limit: POR_PAGINA, search: busca },
+        token,
+      );
+      const response = await apiFetch(url, options);
+
       if (response.ok) {
         const json = await response.json();
-        // Filtrar apenas os que têm level 'Parceiro'
-        let apenasParceiros = json.filter(
-          (user) => user.level === "Parceiro" || user.level === "parceiro",
+        // O recorte por empresa já vem da API; aqui resta apenas separar
+        // os parceiros dos administradores.
+        setParceiros(
+          json.data.filter(
+            (user) => user.level === "Parceiro" || user.level === "parceiro",
+          ),
         );
-
-        if (userLevel === "FullAdmin" || userLevel === "Full Admin") {
-          // FullAdmin vê todos os parceiros
-        } else if (userLevel === "Administrador" || userLevel === "Admin") {
-          // Administrador vê apenas os parceiros que ele cadastrou (master_id igual ao id dele)
-          apenasParceiros = apenasParceiros.filter(
-            (user) => user.master_id === userId,
-          );
-        }
-
-        setParceiros(apenasParceiros);
+        setPaginacao({
+          page: json.page,
+          totalPages: json.totalPages,
+          total: json.total,
+          limit: json.limit,
+        });
       } else {
-        toast.error("Erro ao buscar parceiros");
-        console.error("Erro ao buscar parceiros");
+        toast.error(await mensagemDeErro(response, "Erro ao buscar parceiros"));
       }
     } catch (error) {
-      toast.error("Erro de conexão ao buscar parceiros");
       console.error("Erro na requisição:", error);
     } finally {
       setLoading(false);
@@ -57,8 +72,13 @@ const Parceiros = () => {
   };
 
   useEffect(() => {
-    fetchParceiros();
-  }, []);
+    fetchParceiros(1, buscaAtrasada);
+  }, [buscaAtrasada]);
+
+  const irParaPagina = (pagina) => {
+    if (pagina < 1 || pagina > paginacao.totalPages) return;
+    fetchParceiros(pagina, buscaAtrasada);
+  };
 
   const handleOpenModal = (parceiro = null) => {
     setSelectedParceiro(parceiro);
@@ -87,14 +107,16 @@ const Parceiros = () => {
     const { url, options } = DELETE_USER(parceiroToDelete.id, token);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       if (response.ok) {
         toast.success("Parceiro excluído com sucesso!");
-        fetchParceiros(); // Recarrega a lista
+        const paginaAlvo =
+          parceiros.length === 1 && paginacao.page > 1
+            ? paginacao.page - 1
+            : paginacao.page;
+        fetchParceiros(paginaAlvo, buscaAtrasada);
       } else {
-        const errData = await response.json();
-        toast.error(errData.message || "Erro ao excluir parceiro.");
-        console.error("Erro ao excluir parceiro", errData);
+        toast.error(await mensagemDeErro(response, "Erro ao excluir parceiro."));
       }
     } catch (error) {
       toast.error("Erro de conexão ao excluir parceiro.");
@@ -111,28 +133,26 @@ const Parceiros = () => {
       if (selectedParceiro) {
         // Modo Edição
         const { url, options } = PUT_USER(selectedParceiro.id, userData, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Parceiro atualizado com sucesso!");
-          fetchParceiros(); // Recarrega a lista
+          fetchParceiros(paginacao.page, buscaAtrasada);
           handleCloseModal();
         } else {
-          const errData = await response.json();
-          toast.error(errData.message || "Erro ao atualizar parceiro");
-          console.error("Erro ao atualizar parceiro", errData);
+          toast.error(
+            await mensagemDeErro(response, "Erro ao atualizar parceiro"),
+          );
         }
       } else {
         // Modo Criação
         const { url, options } = POST_USER(userData, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Parceiro criado com sucesso!");
-          fetchParceiros(); // Recarrega a lista
+          fetchParceiros(1, buscaAtrasada);
           handleCloseModal();
         } else {
-          const errData = await response.json();
-          toast.error(errData.message || "Erro ao criar parceiro");
-          console.error("Erro ao criar parceiro", errData);
+          toast.error(await mensagemDeErro(response, "Erro ao criar parceiro"));
         }
       }
     } catch (error) {
@@ -141,18 +161,7 @@ const Parceiros = () => {
     }
   };
 
-  const filteredParceiros = parceiros.filter((parceiro) => {
-    const matchName = parceiro.name
-      ?.toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchEmail = parceiro.email
-      ?.toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchCpf = parceiro.cpf?.includes(searchTerm);
-    return matchName || matchEmail || matchCpf;
-  });
-
-  if (loading) {
+  if (loading && parceiros.length === 0 && !buscaAtrasada) {
     return <LoadingSpinner fullScreen message="Carregando parceiros..." />;
   }
 
@@ -186,17 +195,21 @@ const Parceiros = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredParceiros.length === 0 ? (
+              {parceiros.length === 0 ? (
                 <tr>
                   <td
                     colSpan="5"
                     className="py-4 px-4 text-center text-brand-muted"
                   >
-                    Nenhum parceiro encontrado.
+                    {loading
+                      ? "Carregando..."
+                      : buscaAtrasada
+                        ? `Nenhum parceiro encontrado para "${buscaAtrasada}".`
+                        : "Nenhum parceiro cadastrado ainda."}
                   </td>
                 </tr>
               ) : (
-                filteredParceiros.map((parceiro) => (
+                parceiros.map((parceiro) => (
                   <tr
                     key={parceiro.id}
                     className="border-b border-brand-border hover:bg-brand-dark/50 transition-colors"
@@ -249,6 +262,15 @@ const Parceiros = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={paginacao.page}
+          totalPages={paginacao.totalPages}
+          total={paginacao.total}
+          limit={paginacao.limit}
+          onPageChange={irParaPagina}
+          label="parceiros"
+        />
       </Card>
 
       <UserRegistrationModal
@@ -268,9 +290,11 @@ const Parceiros = () => {
         title="Excluir Parceiro"
         message={
           parceiroToDelete
-            ? `Tem certeza de que deseja excluir o parceiro "${parceiroToDelete.name}"? Esta ação não pode ser desfeita.`
+            ? `Você está prestes a excluir o parceiro "${parceiroToDelete.name} ${parceiroToDelete.sobrenome || ""}".`.trim()
             : ""
         }
+        warning="Os clientes indicados por este parceiro perdem o vínculo e o histórico de comissões dele deixa de ser recuperável. Considere alterar o status para Inativo em vez de excluir."
+        confirmationText={parceiroToDelete?.name}
       />
     </div>
   );

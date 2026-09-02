@@ -4,6 +4,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { maskPhone, maskCurrency, unmaskCurrency } from "../../utils/masks";
 import { useAuth } from "../../hooks/useAuth";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 
 const ClientRegistrationModal = ({
   isOpen,
@@ -28,7 +29,13 @@ const ClientRegistrationModal = ({
   const [isEditing, setIsEditing] = useState(false);
   const [parceiroSearch, setParceiroSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [erros, setErros] = useState({});
   const dropdownRef = useRef(null);
+  const { backdropRef, onBackdropMouseDown, onBackdropClick } = useModalDismiss(
+    isOpen,
+    onClose,
+  );
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -43,6 +50,7 @@ const ClientRegistrationModal = ({
   useEffect(() => {
     if (isOpen) {
       setParceiroSearch("");
+      setErros({});
       if (initialData) {
         setFormData({
           ...defaultFormState,
@@ -80,10 +88,42 @@ const ClientRegistrationModal = ({
       ...prev,
       [name]: formattedValue,
     }));
+    setErros((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev));
   };
 
-  const handleSubmit = (e) => {
+  const validar = () => {
+    const novos = {};
+
+    if (!formData.nome.trim()) novos.nome = "Informe o nome do cliente.";
+
+    const telefoneDigitos = formData.telefone.replace(/\D/g, "");
+    if (!telefoneDigitos) {
+      novos.telefone = "Informe o telefone.";
+    } else if (telefoneDigitos.length < 10) {
+      novos.telefone = "Telefone incompleto (DDD + número).";
+    }
+
+    if (!formData.tipo_servico) {
+      novos.tipo_servico = "Selecione o tipo de serviço.";
+    }
+
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      novos.email = "E-mail inválido.";
+    }
+
+    if (userLevel !== "Parceiro" && !formData.corretor_id) {
+      novos.corretor_id = "Selecione o parceiro responsável.";
+    }
+
+    setErros(novos);
+    return Object.keys(novos).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    if (!validar()) return;
+
     const submissionData = {};
 
     // Pick only fields that belong to the DTO to avoid 400 error
@@ -108,14 +148,28 @@ const ClientRegistrationModal = ({
       submissionData.corretor_id = parseInt(submissionData.corretor_id);
     }
 
-    onSubmit(submissionData);
+    // Trava o botão durante o envio: sem isso um duplo clique criava dois
+    // clientes iguais.
+    setSaving(true);
+    try {
+      await onSubmit(submissionData);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const selectStyle =
     "w-full rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-brand-text shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-all duration-200 focus:border-brand-primary/45 focus:bg-brand-dark/60 focus:outline-none focus:ring-4 focus:ring-brand-primary/12";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md">
+    <div
+      ref={backdropRef}
+      onMouseDown={onBackdropMouseDown}
+      onClick={onBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md"
+    >
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-white/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] bg-brand-surface shadow-[0_32px_120px_rgba(3,8,20,0.58)]">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-brand-border/40 bg-brand-surface px-6 py-5">
           <div>
@@ -128,6 +182,7 @@ const ClientRegistrationModal = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-full border border-white/5 bg-white/[0.02] p-2 text-brand-muted transition-colors hover:bg-brand-surfaceAlt hover:text-brand-text"
           >
             <X size={24} />
@@ -154,7 +209,7 @@ const ClientRegistrationModal = ({
                 name="nome"
                 value={formData.nome}
                 onChange={handleChange}
-                required
+                error={erros.nome}
                 placeholder="Nome do cliente"
               />
               <Input
@@ -173,8 +228,8 @@ const ClientRegistrationModal = ({
                 name="telefone"
                 value={formData.telefone}
                 onChange={handleChange}
+                error={erros.telefone}
                 maxLength={15}
-                required
                 placeholder="(00) 00000-0000"
               />
               <Input
@@ -183,6 +238,7 @@ const ClientRegistrationModal = ({
                 type="email"
                 value={formData.email}
                 onChange={handleChange}
+                error={erros.email}
                 placeholder="email@exemplo.com"
               />
 
@@ -195,7 +251,7 @@ const ClientRegistrationModal = ({
                 name="tipo_servico"
                 value={formData.tipo_servico}
                 onChange={handleChange}
-                required
+                error={erros.tipo_servico}
                 placeholder="Qual serviço/produto está interessado?"
               />
 
@@ -210,7 +266,10 @@ const ClientRegistrationModal = ({
 
               <div className="flex flex-col gap-2 relative" ref={dropdownRef}>
                 <label className="text-sm font-medium text-brand-muted">
-                  Parceiro
+                  Parceiro{" "}
+                  {userLevel !== "Parceiro" && (
+                    <span className="text-red-500">*</span>
+                  )}
                 </label>
 
                 <div
@@ -256,6 +315,10 @@ const ClientRegistrationModal = ({
                     />
                   )}
                 </div>
+
+                {erros.corretor_id && (
+                  <p className="text-xs text-rose-400">{erros.corretor_id}</p>
+                )}
 
                 {isDropdownOpen && (
                   <div className="absolute left-0 top-full z-50 mt-2 flex max-h-60 w-full flex-col overflow-hidden rounded-2xl border border-brand-border bg-brand-surface shadow-2xl">
@@ -349,9 +412,13 @@ const ClientRegistrationModal = ({
             <Button type="button" onClick={onClose} variant="outline" size="sm">
               Cancelar
             </Button>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="sm" disabled={saving}>
               <Save size={18} />
-              {isEditing ? "Salvar Alterações" : "Cadastrar Cliente"}
+              {saving
+                ? "Salvando..."
+                : isEditing
+                  ? "Salvar Alterações"
+                  : "Cadastrar Cliente"}
             </Button>
           </div>
         </form>

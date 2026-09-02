@@ -3,7 +3,8 @@ import { X, Save } from "lucide-react";
 import { toast } from "react-toastify";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { maskCPF, maskPhone } from "../../utils/masks";
+import { maskCPF, maskPhone, maskCEP } from "../../utils/masks";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -41,9 +42,16 @@ const UserRegistrationModal = ({
 
   const [formData, setFormData] = useState(defaultFormState);
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [erros, setErros] = useState({});
+  const { backdropRef, onBackdropMouseDown, onBackdropClick } = useModalDismiss(
+    isOpen,
+    onClose,
+  );
 
   useEffect(() => {
     if (isOpen) {
+      setErros({});
       if (initialData) {
         setFormData({ ...defaultFormState, ...initialData, password: "" });
         setIsEditing(true);
@@ -69,10 +77,11 @@ const UserRegistrationModal = ({
       ...prev,
       [name]: formattedValue,
     }));
+    setErros((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev));
   };
   const handleCEPChange = async (event) => {
     const novoCep = event.target.value.replace(/\D/g, "");
-    setFormData((prev) => ({ ...prev, cep: novoCep }));
+    setFormData((prev) => ({ ...prev, cep: maskCEP(novoCep) }));
 
     if (novoCep.length === 8) {
       try {
@@ -112,20 +121,46 @@ const UserRegistrationModal = ({
     }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const validar = () => {
+    const novos = {};
+
+    if (!formData.name.trim()) novos.name = "Informe o nome.";
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || "")) {
+      novos.email = "Informe um e-mail válido.";
+    }
 
     // A API exige o mínimo em toda senha nova; validar aqui evita um 400.
-    const senhaInformada = (formData.password || "").trim();
-    if (
-      (!isEditing || senhaInformada) &&
-      senhaInformada.length < MIN_PASSWORD_LENGTH
-    ) {
-      toast.error(
-        `A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`,
-      );
-      return;
+    const senha = (formData.password || "").trim();
+    if (!isEditing && !senha) {
+      novos.password = "Informe uma senha.";
+    } else if (senha && senha.length < MIN_PASSWORD_LENGTH) {
+      novos.password = `Mínimo de ${MIN_PASSWORD_LENGTH} caracteres.`;
     }
+
+    const cpfDigitos = (formData.cpf || "").replace(/\D/g, "");
+    if (cpfDigitos && cpfDigitos.length !== 11) {
+      novos.cpf = "CPF incompleto.";
+    }
+
+    const telDigitos = (formData.telefone || "").replace(/\D/g, "");
+    if (telDigitos && telDigitos.length < 10) {
+      novos.telefone = "Telefone incompleto (DDD + número).";
+    }
+
+    setErros(novos);
+
+    if (Object.keys(novos).length > 0) {
+      toast.error("Verifique os campos destacados.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    if (!validar()) return;
 
     if (onSubmit) {
       // Filtrar apenas os campos que pertencem ao formulário para evitar erro 400 no backend (ex: created_at)
@@ -149,7 +184,14 @@ const UserRegistrationModal = ({
         dataToSubmit.master_id = currentUserId;
       }
 
-      onSubmit(dataToSubmit);
+      // Trava o botão durante o envio: sem isso um duplo clique criava dois
+      // usuários iguais.
+      setSaving(true);
+      try {
+        await onSubmit(dataToSubmit);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -159,7 +201,14 @@ const UserRegistrationModal = ({
     "w-full rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-brand-text shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-colors duration-200 focus:border-brand-primary/45 focus:bg-brand-dark/60 focus:outline-none focus:ring-4 focus:ring-brand-primary/12";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md">
+    <div
+      ref={backdropRef}
+      onMouseDown={onBackdropMouseDown}
+      onClick={onBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md"
+    >
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-white/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] bg-brand-surface shadow-[0_32px_120px_rgba(3,8,20,0.58)] animate-in fade-in zoom-in duration-300">
         <div className="flex items-center justify-between border-b border-brand-border/40 px-6 py-5">
           <div>
@@ -173,6 +222,7 @@ const UserRegistrationModal = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-full border border-white/5 bg-white/[0.02] p-2 text-brand-muted transition-colors hover:bg-brand-surfaceAlt hover:text-brand-text"
           >
             <X size={24} />
@@ -194,9 +244,9 @@ const UserRegistrationModal = ({
                   <label className={labelStyle}>Nome *</label>
                   <Input
                     name="name"
+                    error={erros.name}
                     value={formData.name}
                     onChange={handleChange}
-                    required
                     placeholder="Nome"
                   />
                 </div>
@@ -225,6 +275,7 @@ const UserRegistrationModal = ({
                       <label className={labelStyle}>CPF</label>
                       <Input
                         name="cpf"
+                        error={erros.cpf}
                         value={formData.cpf}
                         onChange={handleChange}
                         placeholder="000.000.000-00"
@@ -264,6 +315,7 @@ const UserRegistrationModal = ({
                       <label className={labelStyle}>Telefone</label>
                       <Input
                         name="telefone"
+                        error={erros.telefone}
                         value={formData.telefone}
                         onChange={handleChange}
                         placeholder="(00) 00000-0000"
@@ -389,9 +441,9 @@ const UserRegistrationModal = ({
                   <Input
                     type="email"
                     name="email"
+                    error={erros.email}
                     value={formData.email}
                     onChange={handleChange}
-                    required
                     placeholder="email@exemplo.com"
                   />
                 </div>
@@ -404,10 +456,12 @@ const UserRegistrationModal = ({
                   <Input
                     type="password"
                     name="password"
+                    error={erros.password}
                     value={formData.password}
                     onChange={handleChange}
-                    required={!isEditing}
-                    placeholder="******"
+                    placeholder={
+                      isEditing ? "Deixe em branco para manter" : "••••••••"
+                    }
                   />
                 </div>
                 {currentUserLevel !== "Parceiro" &&
@@ -461,12 +515,27 @@ const UserRegistrationModal = ({
         </div>
 
         <div className="flex justify-end gap-3 border-t border-brand-border/40 bg-brand-surface/90 px-6 py-5 backdrop-blur">
-          <Button type="button" onClick={onClose} variant="outline" size="sm">
+          <Button
+            type="button"
+            onClick={onClose}
+            variant="outline"
+            size="sm"
+            disabled={saving}
+          >
             Cancelar
           </Button>
-          <Button type="submit" form="user-registration-form" size="sm">
+          <Button
+            type="submit"
+            form="user-registration-form"
+            size="sm"
+            disabled={saving}
+          >
             <Save size={18} />
-            {isEditing ? "Salvar Alterações" : "Salvar Usuário"}
+            {saving
+              ? "Salvando..."
+              : isEditing
+                ? "Salvar Alterações"
+                : "Salvar Usuário"}
           </Button>
         </div>
       </div>

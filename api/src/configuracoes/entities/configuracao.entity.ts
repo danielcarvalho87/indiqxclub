@@ -30,6 +30,19 @@ export class Configuracao {
   @Column({ name: "pontos_por_novo_usuario", type: "int" })
   pontosPorNovoUsuario: number;
 
+  /**
+   * Pontos concedidos por real faturado. Era fixo em 1 dentro do código do
+   * frontend, o que fazia `pontosPorNovoUsuario` desaparecer no cálculo.
+   */
+  @Column({
+    name: "pontos_por_real",
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    default: 1,
+  })
+  pontosPorReal: number;
+
   @Column({
     name: "comissao_por_venda",
     type: "decimal",

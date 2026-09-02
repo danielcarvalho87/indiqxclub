@@ -16,7 +16,7 @@ import {
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { maskCPF, maskPhone, maskCEP } from "../utils/masks";
-import { API_URL } from "../api";
+import { API_URL, GET_CONFIGURACAO_PUBLICA } from "../api";
 import logoIndiqx from "../assets/LOGO-INDIQX.svg";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -77,10 +77,9 @@ const Register = () => {
 
   const fetchEmpresaConfig = async (masterId) => {
     try {
-      // Using API_URL to make a public call
-      const response = await fetch(
-        `${API_URL}/configuracoes/publica/${masterId}`,
-      );
+      // Rota pública: expõe apenas o nome da empresa
+      const { url, options } = GET_CONFIGURACAO_PUBLICA(masterId);
+      const response = await fetch(url, options);
       if (response.ok) {
         const json = await response.json();
         if (json && json.length > 0) {

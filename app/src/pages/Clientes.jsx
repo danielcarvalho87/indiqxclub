@@ -7,18 +7,23 @@ import ClientRegistrationModal from "../components/Modals/ClientRegistrationModa
 import ConfirmModal from "../components/Modals/ConfirmModal";
 import ClientViewModal from "../components/Modals/ClientViewModal";
 import {
-  GET_CLIENTES,
+  GET_CLIENTES_PAGINADO,
   POST_CLIENTE,
   PUT_CLIENTE,
   DELETE_CLIENTE,
   GET_USERS,
 } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import { useDebounce } from "../hooks/useDebounce";
+import { Pagination } from "../components/ui/Pagination";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
+const POR_PAGINA = 20;
+
 const Clientes = () => {
-  const { userLevel, userId } = useAuth();
+  const { userLevel } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [clientes, setClientes] = useState([]);
@@ -29,61 +34,41 @@ const Clientes = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [clientToView, setClientToView] = useState(null);
+  const [paginacao, setPaginacao] = useState({
+    page: 1,
+    totalPages: 1,
+    total: 0,
+    limit: POR_PAGINA,
+  });
 
-  const fetchMyPartners = async () => {
-    try {
-      const token = window.localStorage.getItem("token");
-      const { url, options } = GET_USERS(token);
-      const response = await fetch(url, options);
-      if (response.ok) {
-        const json = await response.json();
-        return json.filter(
-          (user) =>
-            (user.level === "Parceiro" || user.level === "parceiro") &&
-            user.master_id === userId,
-        );
-      }
-    } catch (error) {
-      console.error("Erro ao buscar parceiros para filtro:", error);
-    }
-    return [];
-  };
+  // Espera o usuário parar de digitar antes de consultar o servidor
+  const buscaAtrasada = useDebounce(searchTerm, 400);
 
-  const fetchClientes = async () => {
+  const fetchClientes = async (pagina = paginacao.page, busca = buscaAtrasada) => {
     setLoading(true);
     try {
       const token = window.localStorage.getItem("token");
-      const { url, options } = GET_CLIENTES(token);
-      const response = await fetch(url, options);
+      const { url, options } = GET_CLIENTES_PAGINADO(
+        { page: pagina, limit: POR_PAGINA, search: busca },
+        token,
+      );
+      const response = await apiFetch(url, options);
+
       if (response.ok) {
-        let json = await response.json();
-
-        // Filter for Parceiro
-        if (userLevel === "Parceiro" || userLevel === "parceiro") {
-          json = json.filter((c) => {
-            const cId = c.corretor?.id || c.corretor_id;
-            return String(cId) === String(userId);
-          });
-        } else if (userLevel === "Administrador") {
-          // Filtrar clientes do próprio admin e dos seus parceiros
-          const myPartners = await fetchMyPartners();
-          const validIds = [
-            String(userId),
-            ...myPartners.map((p) => String(p.id)),
-          ];
-          json = json.filter((c) => {
-            const cId = c.corretor?.id || c.corretor_id;
-            return validIds.includes(String(cId));
-          });
-        }
-
-        setClientes(json);
+        // A API já devolve apenas os clientes que este usuário pode ver,
+        // então não há mais filtragem por nível aqui.
+        const json = await response.json();
+        setClientes(json.data);
+        setPaginacao({
+          page: json.page,
+          totalPages: json.totalPages,
+          total: json.total,
+          limit: json.limit,
+        });
       } else {
-        toast.error("Erro ao buscar clientes");
-        console.error("Erro ao buscar clientes");
+        toast.error(await mensagemDeErro(response, "Erro ao buscar clientes"));
       }
     } catch (error) {
-      toast.error("Erro de conexão ao buscar clientes");
       console.error("Erro na requisição:", error);
     } finally {
       setLoading(false);
@@ -94,21 +79,14 @@ const Clientes = () => {
     try {
       const token = window.localStorage.getItem("token");
       const { url, options } = GET_USERS(token);
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       if (response.ok) {
         const json = await response.json();
-        // Filtrar apenas os que têm level 'Parceiro'
-        let apenasParceiros = json.filter(
-          (user) => user.level === "Parceiro" || user.level === "parceiro",
+        setParceiros(
+          json.filter(
+            (user) => user.level === "Parceiro" || user.level === "parceiro",
+          ),
         );
-
-        if (userLevel === "Administrador") {
-          apenasParceiros = apenasParceiros.filter(
-            (user) => user.master_id === userId,
-          );
-        }
-
-        setParceiros(apenasParceiros);
       }
     } catch (error) {
       console.error("Erro ao buscar parceiros:", error);
@@ -116,9 +94,18 @@ const Clientes = () => {
   };
 
   useEffect(() => {
-    fetchClientes();
     fetchParceiros();
   }, []);
+
+  // Volta para a primeira página sempre que o termo de busca muda
+  useEffect(() => {
+    fetchClientes(1, buscaAtrasada);
+  }, [buscaAtrasada]);
+
+  const irParaPagina = (pagina) => {
+    if (pagina < 1 || pagina > paginacao.totalPages) return;
+    fetchClientes(pagina, buscaAtrasada);
+  };
 
   const handleOpenModal = (cliente = null) => {
     setSelectedCliente(cliente);
@@ -147,13 +134,17 @@ const Clientes = () => {
     const { url, options } = DELETE_CLIENTE(clienteToDelete.id, token);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       if (response.ok) {
         toast.success("Cliente excluído com sucesso!");
-        fetchClientes();
+        // Se a página ficou vazia, recua uma página
+        const paginaAlvo =
+          clientes.length === 1 && paginacao.page > 1
+            ? paginacao.page - 1
+            : paginacao.page;
+        fetchClientes(paginaAlvo, buscaAtrasada);
       } else {
-        const errData = await response.json();
-        toast.error(errData.message || "Erro ao excluir cliente.");
+        toast.error(await mensagemDeErro(response, "Erro ao excluir cliente."));
       }
     } catch (error) {
       toast.error("Erro de conexão ao excluir cliente.");
@@ -183,26 +174,26 @@ const Clientes = () => {
           clienteData,
           token,
         );
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Cliente atualizado com sucesso!");
-          fetchClientes();
+          fetchClientes(paginacao.page, buscaAtrasada);
           handleCloseModal();
         } else {
-          const errData = await response.json();
-          toast.error(errData.message || "Erro ao atualizar cliente.");
+          toast.error(
+            await mensagemDeErro(response, "Erro ao atualizar cliente."),
+          );
         }
       } else {
         // Criação
         const { url, options } = POST_CLIENTE(clienteData, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Cliente cadastrado com sucesso!");
-          fetchClientes();
+          fetchClientes(1, buscaAtrasada);
           handleCloseModal();
         } else {
-          const errData = await response.json();
-          toast.error(errData.message || "Erro ao criar cliente.");
+          toast.error(await mensagemDeErro(response, "Erro ao criar cliente."));
         }
       }
     } catch (error) {
@@ -211,23 +202,7 @@ const Clientes = () => {
     }
   };
 
-  const filteredClientes = clientes.filter((cliente) => {
-    const searchTermLower = searchTerm.toLowerCase();
-    const matchName = `${cliente.nome} ${cliente.sobrenome || ""}`
-      .toLowerCase()
-      .includes(searchTermLower);
-    const matchEmail = cliente.email?.toLowerCase().includes(searchTermLower);
-    const matchTelefone = cliente.telefone?.includes(searchTerm);
-    const matchParceiro = cliente.corretor
-      ? `${cliente.corretor.name} ${cliente.corretor.sobrenome || ""}`
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase())
-      : false;
-
-    return matchName || matchEmail || matchTelefone || matchParceiro;
-  });
-
-  if (loading) {
+  if (loading && clientes.length === 0 && !buscaAtrasada) {
     return <LoadingSpinner fullScreen message="Carregando clientes..." />;
   }
 
@@ -245,6 +220,7 @@ const Clientes = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-1/3 px-4 py-2 bg-brand-surface border border-brand-border rounded-md text-brand-text focus:outline-none focus:ring-2 focus:ring-brand-primary"
+          aria-label="Buscar clientes"
         />
       </div>
 
@@ -261,14 +237,18 @@ const Clientes = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredClientes.length === 0 ? (
+              {clientes.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="py-4 text-center text-brand-muted">
-                    Nenhum cliente encontrado.
+                    {loading
+                      ? "Carregando..."
+                      : buscaAtrasada
+                        ? `Nenhum cliente encontrado para "${buscaAtrasada}".`
+                        : "Nenhum cliente cadastrado ainda."}
                   </td>
                 </tr>
               ) : (
-                filteredClientes.map((cliente) => (
+                clientes.map((cliente) => (
                   <tr
                     key={cliente.id}
                     className="border-b border-brand-border hover:bg-brand-dark/50 transition-colors"
@@ -355,6 +335,15 @@ const Clientes = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={paginacao.page}
+          totalPages={paginacao.totalPages}
+          total={paginacao.total}
+          limit={paginacao.limit}
+          onPageChange={irParaPagina}
+          label="clientes"
+        />
       </Card>
 
       <ClientRegistrationModal
@@ -370,6 +359,7 @@ const Clientes = () => {
         onClose={handleCloseConfirmDelete}
         onConfirm={handleConfirmDelete}
         title="Excluir Cliente"
+        warning="O histórico de indicação e o valor de contrato deste cliente serão perdidos."
         message={`Tem certeza que deseja excluir o cliente ${clienteToDelete?.nome}? Esta ação não pode ser desfeita.`}
       />
 

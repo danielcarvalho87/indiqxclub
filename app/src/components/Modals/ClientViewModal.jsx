@@ -9,8 +9,14 @@ import {
   Calendar,
 } from "lucide-react";
 import { Button } from "../ui/Button";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 
 const ClientViewModal = ({ isOpen, onClose, cliente }) => {
+  const { backdropRef, onBackdropMouseDown, onBackdropClick } = useModalDismiss(
+    isOpen,
+    onClose,
+  );
+
   if (!isOpen || !cliente) return null;
 
   const formatCurrency = (val) => {
@@ -27,7 +33,14 @@ const ClientViewModal = ({ isOpen, onClose, cliente }) => {
   const whatsappLink = cleanPhone ? `https://wa.me/55${cleanPhone}` : "#";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md">
+    <div
+      ref={backdropRef}
+      onMouseDown={onBackdropMouseDown}
+      onClick={onBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md"
+    >
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-white/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] bg-brand-surface shadow-[0_32px_120px_rgba(3,8,20,0.58)] animate-in fade-in zoom-in duration-300">
         <div className="flex items-center justify-between border-b border-brand-border/40 px-6 py-5">
           <div>
@@ -40,6 +53,7 @@ const ClientViewModal = ({ isOpen, onClose, cliente }) => {
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-full border border-white/5 bg-white/[0.02] p-2 text-brand-muted transition-colors hover:bg-brand-surfaceAlt hover:text-brand-text"
           >
             <X size={24} />

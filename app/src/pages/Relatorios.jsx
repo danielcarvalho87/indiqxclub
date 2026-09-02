@@ -14,16 +14,25 @@ import {
 import { Card } from "../components/ui/Card";
 import { GET_CLIENTES, GET_USERS, GET_CONFIGURACOES } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import {
+  CONFIG_PADRAO,
+  calcularComissao,
+  calcularPontos,
+  corretorIdDe,
+  dataDeFechamento,
+  faturamentoDe,
+  formatarMoeda,
+  isContratoFechado,
+  normalizarConfiguracao,
+} from "../utils/pontos";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
 const Relatorios = () => {
   const { userId, userLevel, masterId } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [configuracao, setConfiguracao] = useState({
-    pontosPorNovoUsuario: 1,
-    comissaoPorVenda: 5,
-  });
+  const [configuracao, setConfiguracao] = useState(CONFIG_PADRAO);
   const [stats, setStats] = useState({
     totalVendas: 0,
     totalClientes: 0,
@@ -40,7 +49,7 @@ const Relatorios = () => {
       setLoading(true);
       const token = window.localStorage.getItem("token");
 
-      let currentConfig = { pontosPorNovoUsuario: 1, comissaoPorVenda: 5 };
+      let currentConfig = { ...CONFIG_PADRAO };
       const targetMasterId =
         userLevel === "Administrador" ||
         userLevel === "Admin" ||
@@ -51,22 +60,11 @@ const Relatorios = () => {
       if (targetMasterId) {
         try {
           const { url, options } = GET_CONFIGURACOES(targetMasterId, token);
-          const response = await fetch(url, options);
+          const response = await apiFetch(url, options);
           if (response.ok) {
             const configs = await response.json();
             if (configs && configs.length > 0) {
-              currentConfig = {
-                pontosPorNovoUsuario: Number(
-                  configs[0].pontos_por_novo_usuario ||
-                    configs[0].pontosPorNovoUsuario ||
-                    1,
-                ),
-                comissaoPorVenda: Number(
-                  configs[0].comissao_por_venda ||
-                    configs[0].comissaoPorVenda ||
-                    5,
-                ),
-              };
+              currentConfig = normalizarConfiguracao(configs[0]);
               setConfiguracao(currentConfig);
             }
           }
@@ -76,10 +74,23 @@ const Relatorios = () => {
       }
 
       // Fetch Data
+      const clientesReq = GET_CLIENTES(token);
+      const usersReq = GET_USERS(token);
+
       const [resClients, resUsers] = await Promise.all([
-        fetch(GET_CLIENTES(token).url, GET_CLIENTES(token).options),
-        fetch(GET_USERS(token).url, GET_USERS(token).options),
+        apiFetch(clientesReq.url, clientesReq.options),
+        apiFetch(usersReq.url, usersReq.options),
       ]);
+
+      if (!resClients.ok || !resUsers.ok) {
+        toast.error(
+          await mensagemDeErro(
+            resClients.ok ? resUsers : resClients,
+            "Erro ao carregar dados.",
+          ),
+        );
+        return;
+      }
 
       const clients = await resClients.json();
       const users = await resUsers.json();
@@ -97,14 +108,9 @@ const Relatorios = () => {
   const processData = (clients, parceiros, config) => {
     // 1. KPIs Gerais
     const totalClientes = clients.length;
-    const contratosFechados = clients.filter(
-      (c) => c.status === "Contrato fechado",
-    );
-    const totalVendas = contratosFechados.reduce(
-      (acc, curr) => acc + Number(curr.valor_contrato || 0),
-      0,
-    );
-    const comissaoTotal = totalVendas * (config.comissaoPorVenda / 100);
+    const contratosFechados = clients.filter(isContratoFechado);
+    const totalVendas = faturamentoDe(contratosFechados);
+    const comissaoTotal = calcularComissao(totalVendas, config);
     const ticketMedio =
       contratosFechados.length > 0 ? totalVendas / contratosFechados.length : 0;
     const taxaConversao =
@@ -162,7 +168,8 @@ const Relatorios = () => {
     }
 
     contratosFechados.forEach((client) => {
-      const date = new Date(client.updated_at || client.created_at);
+      const date = dataDeFechamento(client);
+      if (!date) return;
       const monthIndex = months.findIndex(
         (m) =>
           m.date.getMonth() === date.getMonth() &&
@@ -182,45 +189,39 @@ const Relatorios = () => {
     setMonthlyData(finalMonthlyData);
 
     // 4. Ranking Geral Parceiros
-    const brokerStats = {};
+    const porParceiro = new Map();
+
     clients.forEach((client) => {
-      const parceiroId = client.corretor?.id || client.corretor_id;
-      if (parceiroId) {
-        if (!brokerStats[parceiroId]) {
-          brokerStats[parceiroId] = {
-            id: parceiroId,
-            total: 0,
-            count: 0,
-            name: "Desconhecido",
-            totalClientes: 0,
-            pontos: 0,
-          };
-        }
-        brokerStats[parceiroId].totalClientes += 1;
+      const parceiroId = corretorIdDe(client);
+      if (!parceiroId) return;
 
-        if (client.status === "Contrato fechado") {
-          brokerStats[parceiroId].total += Number(client.valor_contrato || 0);
-          brokerStats[parceiroId].count += 1;
-        }
+      const chave = String(parceiroId);
+      if (!porParceiro.has(chave)) {
+        porParceiro.set(chave, { id: parceiroId, clientes: [] });
       }
+      porParceiro.get(chave).clientes.push(client);
     });
 
-    // Preencher nomes e calcular pontos
-    Object.keys(brokerStats).forEach((id) => {
-      const broker = parceiros.find((u) => String(u.id) === String(id));
-      if (broker) {
-        brokerStats[id].name = `${broker.name} ${broker.sobrenome || ""}`;
-      }
+    const brokerStats = Array.from(porParceiro.values()).map((parceiro) => {
+      const cadastro = parceiros.find(
+        (u) => String(u.id) === String(parceiro.id),
+      );
+      const fechados = parceiro.clientes.filter(isContratoFechado);
 
-      // Pontos = (clientes indicados * pontos por usuário) + (1 ponto para cada real do faturamento total)
-      const pontosPorCliente =
-        brokerStats[id].totalClientes *
-        Number(config.pontosPorNovoUsuario || 1);
-      const pontosPorFaturamento = Math.floor(brokerStats[id].total);
-      brokerStats[id].pontos = pontosPorCliente + pontosPorFaturamento;
+      return {
+        id: parceiro.id,
+        name: cadastro
+          ? `${cadastro.name} ${cadastro.sobrenome || ""}`.trim()
+          : "Desconhecido",
+        total: faturamentoDe(parceiro.clientes),
+        count: fechados.length,
+        totalClientes: parceiro.clientes.length,
+        // Mesma fórmula do dashboard e de "meus ganhos" (utils/pontos.js)
+        pontos: calcularPontos(parceiro.clientes, config),
+      };
     });
 
-    const sortedBrokers = Object.values(brokerStats)
+    const sortedBrokers = brokerStats
       .sort((a, b) => b.pontos - a.pontos)
       .slice(0, 10); // Top 10
     setTopBrokers(sortedBrokers);
@@ -232,12 +233,6 @@ const Relatorios = () => {
     }
   }, [userId]);
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  };
 
   if (loading) {
     return <LoadingSpinner fullScreen message="Carregando relatórios..." />;
@@ -269,7 +264,7 @@ const Relatorios = () => {
                 Vendas Totais
               </p>
               <h3 className="text-2xl font-bold text-brand-text mt-1">
-                {loading ? "..." : formatCurrency(stats.totalVendas)}
+                {loading ? "..." : formatarMoeda(stats.totalVendas)}
               </h3>
             </div>
             <div className="p-2 bg-brand-primary/10 rounded-lg text-brand-primary">
@@ -289,7 +284,7 @@ const Relatorios = () => {
                 Comissões
               </p>
               <h3 className="text-2xl font-bold text-brand-text mt-1">
-                {loading ? "..." : formatCurrency(stats.comissaoTotal)}
+                {loading ? "..." : formatarMoeda(stats.comissaoTotal)}
               </h3>
             </div>
             <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
@@ -327,7 +322,7 @@ const Relatorios = () => {
                 Ticket Médio
               </p>
               <h3 className="text-2xl font-bold text-brand-text mt-1">
-                {loading ? "..." : formatCurrency(stats.ticketMedio)}
+                {loading ? "..." : formatarMoeda(stats.ticketMedio)}
               </h3>
             </div>
             <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500">
@@ -377,7 +372,7 @@ const Relatorios = () => {
                   >
                     {/* Tooltip */}
                     <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-brand-surface text-brand-text text-xs py-1 px-2 rounded border border-brand-border pointer-events-none whitespace-nowrap z-10">
-                      {formatCurrency(data.value)}
+                      {formatarMoeda(data.value)}
                     </div>
 
                     {/* Barra */}
@@ -508,10 +503,10 @@ const Relatorios = () => {
                       </span>
                     </td>
                     <td className="py-4 px-4 text-right font-bold text-brand-primary">
-                      {formatCurrency(broker.total)}
+                      {formatarMoeda(broker.total)}
                     </td>
                     <td className="py-4 px-4 text-right font-bold text-amber-500">
-                      {formatCurrency(
+                      {formatarMoeda(
                         broker.total * (configuracao.comissaoPorVenda / 100),
                       )}
                     </td>

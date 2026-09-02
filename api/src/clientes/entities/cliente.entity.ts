@@ -42,6 +42,14 @@ export class Cliente {
   @Column({ length: 20, default: "Ativo" })
   status: string;
 
+  /**
+   * Momento em que o contrato foi marcado como fechado.
+   * Preenchido pelo servidor na transição de status: relatórios usavam
+   * `updated_at`, que muda a cada edição e distorcia o faturamento do mês.
+   */
+  @Column({ type: "datetime", nullable: true })
+  data_fechamento: Date | null;
+
   @CreateDateColumn()
   created_at: Date;
 

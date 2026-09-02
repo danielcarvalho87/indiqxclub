@@ -6,7 +6,8 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
 import { PUT_USER, GET_USER } from "../api";
-import { maskCPF, maskPhone } from "../utils/masks";
+import { maskCPF, maskPhone, maskCEP } from "../utils/masks";
+import { apiFetch, mensagemDeErro } from "../lib/http";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
@@ -46,7 +47,7 @@ const MeusDados = () => {
         try {
           // Fetch fresh data
           const { url, options } = GET_USER(token);
-          const response = await fetch(url, options);
+          const response = await apiFetch(url, options);
           const json = await response.json();
 
           if (response.ok) {
@@ -86,7 +87,7 @@ const MeusDados = () => {
 
   const handleCEPChange = async (event) => {
     const novoCep = event.target.value.replace(/\D/g, "");
-    setFormData((prev) => ({ ...prev, cep: novoCep }));
+    setFormData((prev) => ({ ...prev, cep: maskCEP(novoCep) }));
 
     if (novoCep.length === 8) {
       try {
@@ -157,17 +158,13 @@ const MeusDados = () => {
       delete payload.email;
 
       const { url, options } = PUT_USER(userId, payload, token);
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
 
       if (response.ok) {
         toast.success("Dados atualizados com sucesso!");
         setFormData((prev) => ({ ...prev, password: "" }));
       } else {
-        const err = await response.json().catch(() => ({}));
-        const detalhe = Array.isArray(err.message)
-          ? err.message.join(", ")
-          : err.message;
-        toast.error(detalhe || "Erro ao atualizar dados.");
+        toast.error(await mensagemDeErro(response, "Erro ao atualizar dados."));
       }
     } catch (error) {
       console.error("Erro ao salvar:", error);

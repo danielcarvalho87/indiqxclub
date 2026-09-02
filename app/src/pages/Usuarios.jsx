@@ -5,10 +5,15 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import UserRegistrationModal from "../components/Modals/UserRegistrationModal";
 import ConfirmModal from "../components/Modals/ConfirmModal";
-import { GET_USERS, POST_USER, PUT_USER, DELETE_USER } from "../api";
+import { GET_USERS_PAGINADO, POST_USER, PUT_USER, DELETE_USER } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import { useDebounce } from "../hooks/useDebounce";
+import { Pagination } from "../components/ui/Pagination";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+
+const POR_PAGINA = 20;
 
 const Usuarios = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,35 +22,51 @@ const Usuarios = () => {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [paginacao, setPaginacao] = useState({
+    page: 1,
+    totalPages: 1,
+    total: 0,
+    limit: POR_PAGINA,
+  });
 
-  const { userLevel, userId } = useAuth();
+  const { userLevel } = useAuth();
+  const buscaAtrasada = useDebounce(searchTerm, 400);
 
-  const fetchUsuarios = async () => {
+  const fetchUsuarios = async (
+    pagina = paginacao.page,
+    busca = buscaAtrasada,
+  ) => {
     setLoading(true);
     try {
       const token = window.localStorage.getItem("token");
-      const { url, options } = GET_USERS(token);
-      const response = await fetch(url, options);
+      const { url, options } = GET_USERS_PAGINADO(
+        { page: pagina, limit: POR_PAGINA, search: busca },
+        token,
+      );
+      const response = await apiFetch(url, options);
+
       if (response.ok) {
-        let json = await response.json();
-
-        // Filtragem baseada no nível de acesso
-        if (userLevel === "FullAdmin" || userLevel === "Full Admin") {
-          // Full Admin vê todos os usuários sem filtro
-        } else if (userLevel === "Administrador") {
-          // Administrador vê apenas seus próprios dados (já que não gerencia parceiros nesta tela)
-          json = json.filter((user) => user.id === userId);
-        } else if (userLevel === "Parceiro") {
-          json = json.filter((user) => user.id === userId);
-        }
-
-        setUsuarios(json);
+        const json = await response.json();
+        // A API já limita ao que este usuário pode ver; esta tela mostra
+        // apenas as contas administrativas.
+        setUsuarios(
+          json.data.filter((user) =>
+            ["Administrador", "Admin", "FullAdmin", "Full Admin"].includes(
+              user.level,
+            ),
+          ),
+        );
+        setPaginacao({
+          page: json.page,
+          totalPages: json.totalPages,
+          total: json.total,
+          limit: json.limit,
+        });
       } else {
-        toast.error("Erro ao buscar usuários");
-        console.error("Erro ao buscar usuários");
+        toast.error(await mensagemDeErro(response, "Erro ao buscar usuários"));
       }
     } catch (error) {
-      toast.error("Erro de conexão ao buscar usuários");
       console.error("Erro na requisição:", error);
     } finally {
       setLoading(false);
@@ -53,8 +74,13 @@ const Usuarios = () => {
   };
 
   useEffect(() => {
-    fetchUsuarios();
-  }, []);
+    fetchUsuarios(1, buscaAtrasada);
+  }, [buscaAtrasada]);
+
+  const irParaPagina = (pagina) => {
+    if (pagina < 1 || pagina > paginacao.totalPages) return;
+    fetchUsuarios(pagina, buscaAtrasada);
+  };
 
   const handleOpenModal = (user = null) => {
     setSelectedUser(user);
@@ -83,14 +109,16 @@ const Usuarios = () => {
     const { url, options } = DELETE_USER(userToDelete.id, token);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       if (response.ok) {
         toast.success("Usuário excluído com sucesso!");
-        fetchUsuarios(); // Recarrega a lista
+        const paginaAlvo =
+          usuarios.length === 1 && paginacao.page > 1
+            ? paginacao.page - 1
+            : paginacao.page;
+        fetchUsuarios(paginaAlvo, buscaAtrasada);
       } else {
-        const errData = await response.json();
-        toast.error(errData.message || "Erro ao excluir usuário.");
-        console.error("Erro ao excluir usuário", errData);
+        toast.error(await mensagemDeErro(response, "Erro ao excluir usuário."));
       }
     } catch (error) {
       toast.error("Erro de conexão ao excluir usuário.");
@@ -107,28 +135,26 @@ const Usuarios = () => {
       if (selectedUser) {
         // Modo Edição
         const { url, options } = PUT_USER(selectedUser.id, userData, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Usuário atualizado com sucesso!");
-          fetchUsuarios(); // Recarrega a lista
+          fetchUsuarios(paginacao.page, buscaAtrasada);
           handleCloseModal();
         } else {
-          const errData = await response.json();
-          toast.error(errData.message || "Erro ao atualizar usuário");
-          console.error("Erro ao atualizar usuário", errData);
+          toast.error(
+            await mensagemDeErro(response, "Erro ao atualizar usuário"),
+          );
         }
       } else {
         // Modo Criação
         const { url, options } = POST_USER(userData, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Usuário criado com sucesso!");
-          fetchUsuarios(); // Recarrega a lista
+          fetchUsuarios(1, buscaAtrasada);
           handleCloseModal();
         } else {
-          const errData = await response.json();
-          toast.error(errData.message || "Erro ao criar usuário");
-          console.error("Erro ao criar usuário", errData);
+          toast.error(await mensagemDeErro(response, "Erro ao criar usuário"));
         }
       }
     } catch (error) {
@@ -137,18 +163,9 @@ const Usuarios = () => {
     }
   };
 
-  const filteredUsuarios = usuarios.filter((user) => {
-    return (
-      user.level === "Administrador" ||
-      user.level === "Admin" ||
-      user.level === "FullAdmin" ||
-      user.level === "Full Admin"
-    );
-  });
-
   const isFullAdmin = userLevel === "FullAdmin" || userLevel === "Full Admin";
 
-  if (loading) {
+  if (loading && usuarios.length === 0 && !buscaAtrasada) {
     return <LoadingSpinner fullScreen message="Carregando usuários..." />;
   }
 
@@ -163,6 +180,19 @@ const Usuarios = () => {
         )}
       </div>
 
+      {isFullAdmin && (
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Buscar por nome, e-mail ou CPF..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Buscar usuários"
+            className="w-full md:w-1/3 px-4 py-2 bg-brand-surface border border-brand-border rounded-md text-brand-text focus:outline-none focus:ring-2 focus:ring-brand-primary"
+          />
+        </div>
+      )}
+
       <Card>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
@@ -176,17 +206,21 @@ const Usuarios = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredUsuarios.length === 0 ? (
+              {usuarios.length === 0 ? (
                 <tr>
                   <td
                     colSpan="5"
                     className="py-4 px-4 text-center text-brand-muted"
                   >
-                    Nenhum usuário encontrado.
+                    {loading
+                      ? "Carregando..."
+                      : buscaAtrasada
+                        ? `Nenhum usuário encontrado para "${buscaAtrasada}".`
+                        : "Nenhum usuário cadastrado ainda."}
                   </td>
                 </tr>
               ) : (
-                filteredUsuarios.map((usuario) => (
+                usuarios.map((usuario) => (
                   <tr
                     key={usuario.id}
                     className="border-b border-brand-border hover:bg-brand-dark/50 transition-colors"
@@ -252,6 +286,15 @@ const Usuarios = () => {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={paginacao.page}
+          totalPages={paginacao.totalPages}
+          total={paginacao.total}
+          limit={paginacao.limit}
+          onPageChange={irParaPagina}
+          label="usuários"
+        />
       </Card>
 
       {/* Renderiza o modal com isParceiro = false (padrão) -> Apenas campos essenciais e nível Administrador */}
@@ -272,9 +315,11 @@ const Usuarios = () => {
         title="Excluir Usuário"
         message={
           userToDelete
-            ? `Tem certeza de que deseja excluir o usuário "${userToDelete.name}"? Esta ação não pode ser desfeita.`
+            ? `Você está prestes a excluir o usuário "${userToDelete.name} ${userToDelete.sobrenome || ""}".`.trim()
             : ""
         }
+        warning="Os parceiros vinculados a este administrador ficam sem empresa responsável. Considere alterar o status para Inativo em vez de excluir."
+        confirmationText={userToDelete?.name}
       />
     </div>
   );

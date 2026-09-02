@@ -36,6 +36,15 @@ export class UpdateConfiguracaoDto {
   @Min(0)
   pontosPorNovoUsuario?: number;
 
+  @ApiProperty({
+    description: "Pontos concedidos por real faturado",
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pontosPorReal?: number;
+
   @ApiProperty({ description: "Comissão por venda (%)", required: false })
   @IsOptional()
   @IsNumber()

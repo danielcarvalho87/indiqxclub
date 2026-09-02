@@ -82,6 +82,47 @@ export function DELETE_USER(id, token) {
   };
 }
 
+/** Monta a query string de paginacao/busca ignorando valores vazios. */
+function queryPaginacao({ page, limit, search } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  if (search && search.trim()) params.set("search", search.trim());
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/**
+ * Lista paginada de clientes.
+ * Retorna { data, total, page, limit, totalPages } — diferente de
+ * GET_CLIENTES, que continua devolvendo o array completo para as telas
+ * que agregam sobre toda a base (dashboard, relatorios, meus ganhos).
+ */
+export function GET_CLIENTES_PAGINADO(params, token) {
+  return {
+    url: API_URL + "/clientes" + queryPaginacao(params),
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+/** Lista paginada de usuarios. Mesma forma de resposta de GET_CLIENTES_PAGINADO. */
+export function GET_USERS_PAGINADO(params, token) {
+  return {
+    url: API_URL + "/user" + queryPaginacao(params),
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
 export function GET_CLIENTES(token) {
   return {
     url: API_URL + "/clientes",
@@ -117,6 +158,14 @@ export function GET_CONFIGURACOES(masterId, token) {
         Authorization: "Bearer " + token,
       },
     },
+  };
+}
+
+/** Dados publicos de exibicao da empresa (tela de cadastro de parceiro). */
+export function GET_CONFIGURACAO_PUBLICA(masterId) {
+  return {
+    url: API_URL + `/configuracoes/publica/${masterId}`,
+    options: { method: "GET" },
   };
 }
 

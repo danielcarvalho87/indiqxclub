@@ -20,16 +20,28 @@ import ClientRegistrationModal from "../components/Modals/ClientRegistrationModa
 import ClientViewModal from "../components/Modals/ClientViewModal";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import {
+  CONFIG_PADRAO,
+  calcularComissao,
+  calcularPontos,
+  corretorIdDe,
+  dataDeFechamento,
+  faturamentoDe,
+  formatarMoeda,
+  isContratoFechado,
+  mesmoMes,
+  normalizarConfiguracao,
+  STATUS_FECHADO,
+  STATUS_PERDIDO,
+} from "../utils/pontos";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
 const Dashboard = () => {
   const { userId, userLevel, masterId } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [configuracao, setConfiguracao] = useState({
-    pontosPorNovoUsuario: 1,
-    comissaoPorVenda: 5,
-  });
+  const [configuracao, setConfiguracao] = useState(CONFIG_PADRAO);
   const [stats, setStats] = useState({
     totalClientes: 0,
     vendasMes: 0,
@@ -53,7 +65,7 @@ const Dashboard = () => {
       setLoading(true);
       const token = window.localStorage.getItem("token");
 
-      let currentConfig = { pontosPorNovoUsuario: 1, comissaoPorVenda: 5 };
+      let currentConfig = { ...CONFIG_PADRAO };
       const targetMasterId =
         userLevel === "Administrador" ||
         userLevel === "Admin" ||
@@ -64,22 +76,11 @@ const Dashboard = () => {
       if (targetMasterId) {
         try {
           const { url, options } = GET_CONFIGURACOES(targetMasterId, token);
-          const response = await fetch(url, options);
+          const response = await apiFetch(url, options);
           if (response.ok) {
             const configs = await response.json();
             if (configs && configs.length > 0) {
-              currentConfig = {
-                pontosPorNovoUsuario: Number(
-                  configs[0].pontos_por_novo_usuario ||
-                    configs[0].pontosPorNovoUsuario ||
-                    1,
-                ),
-                comissaoPorVenda: Number(
-                  configs[0].comissao_por_venda ||
-                    configs[0].comissaoPorVenda ||
-                    5,
-                ),
-              };
+              currentConfig = normalizarConfiguracao(configs[0]);
               setConfiguracao(currentConfig);
             }
           }
@@ -90,12 +91,24 @@ const Dashboard = () => {
 
       // Fetch Clients
       const { url: urlClients, options: optionsClients } = GET_CLIENTES(token);
-      const resClients = await fetch(urlClients, optionsClients);
-      const clientsData = await resClients.json();
-
-      // Fetch Users (Parceiros)
       const { url: urlUsers, options: optionsUsers } = GET_USERS(token);
-      const resUsers = await fetch(urlUsers, optionsUsers);
+
+      const [resClients, resUsers] = await Promise.all([
+        apiFetch(urlClients, optionsClients),
+        apiFetch(urlUsers, optionsUsers),
+      ]);
+
+      if (!resClients.ok || !resUsers.ok) {
+        toast.error(
+          await mensagemDeErro(
+            resClients.ok ? resUsers : resClients,
+            "Erro ao carregar dados do dashboard.",
+          ),
+        );
+        return;
+      }
+
+      const clientsData = await resClients.json();
       const usersData = await resUsers.json();
 
       const parceirosList = usersData.filter((u) => u.level === "Parceiro");
@@ -111,43 +124,26 @@ const Dashboard = () => {
   };
 
   const processStats = (clients, parceirosList, config) => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const agora = new Date();
 
     // 1. Total Clientes
     const totalClientes = clients.length;
 
-    // 2. Vendas Mês (Contrato fechado + Current Month)
-    // Assuming updated_at is the closing date for 'Contrato fechado'
-    const vendasMes = clients.reduce((acc, client) => {
-      if (client.status === "Contrato fechado") {
-        const date = new Date(client.updated_at || client.created_at);
-        if (
-          date.getMonth() === currentMonth &&
-          date.getFullYear() === currentYear
-        ) {
-          return acc + Number(client.valor_contrato || 0);
-        }
-      }
-      return acc;
-    }, 0);
+    // 2. Vendas do mês — usa data_fechamento (gravada pelo servidor na
+    // transição de status). Antes usava updated_at, então editar um contrato
+    // antigo jogava o valor dele para o mês corrente.
+    const fechadosNoMes = clients.filter(
+      (c) => isContratoFechado(c) && mesmoMes(dataDeFechamento(c), agora),
+    );
+    const vendasMes = faturamentoDe(fechadosNoMes);
 
-    // 3. Taxa de Conversão (Fechados / Total)
-    const totalFechados = clients.filter(
-      (c) => c.status === "Contrato fechado",
-    ).length;
+    // 3. Taxa de Conversão
+    const totalFechados = clients.filter(isContratoFechado).length;
     const totalPerdidos = clients.filter(
-      (c) => c.status === "Contrato perdido",
+      (c) => c.status === STATUS_PERDIDO,
     ).length;
     const taxaConversao =
       totalClientes > 0 ? (totalFechados / totalClientes) * 100 : 0;
-
-    // 4. Leads Convertidos
-    const leadsConvertidos = totalFechados;
-
-    // 4.5 Comissões Mês
-    const comissoesMes = vendasMes * (config.comissaoPorVenda / 100);
 
     setStats({
       totalClientes,
@@ -155,74 +151,58 @@ const Dashboard = () => {
       taxaConversao,
       totalFechados,
       totalPerdidos,
-      leadsConvertidos,
-      comissoesMes,
+      leadsConvertidos: totalFechados,
+      comissoesMes: calcularComissao(vendasMes, config),
     });
 
-    // 5. Ranking Parceiros (Top 5 Sales in Current Month)
-    const brokerSales = {};
+    // 4. Ranking de parceiros por pontuação
+    const porParceiro = new Map();
 
     clients.forEach((client) => {
-      // Calculate points for all clients of the broker
-      const parceiroId = client.corretor?.id || client.corretor_id;
-      if (parceiroId) {
-        if (!brokerSales[parceiroId]) {
-          brokerSales[parceiroId] = {
-            id: parceiroId,
-            name: client.corretor?.name || "Desconhecido",
-            sobrenome: client.corretor?.sobrenome || "",
-            total: 0,
-            count: 0,
-            totalClientes: 0,
-            pontos: 0,
-          };
-        }
-        brokerSales[parceiroId].totalClientes += 1;
+      const parceiroId = corretorIdDe(client);
+      if (!parceiroId) return;
 
-        if (client.status === "Contrato fechado") {
-          // All time total for points calculation
-          brokerSales[parceiroId].total += Number(client.valor_contrato || 0);
-
-          const date = new Date(client.updated_at || client.created_at);
-          if (
-            date.getMonth() === currentMonth &&
-            date.getFullYear() === currentYear
-          ) {
-            brokerSales[parceiroId].count += 1;
-          }
-        }
+      const chave = String(parceiroId);
+      if (!porParceiro.has(chave)) {
+        porParceiro.set(chave, {
+          id: parceiroId,
+          name: client.corretor?.name || "",
+          sobrenome: client.corretor?.sobrenome || "",
+          clientes: [],
+        });
       }
+      porParceiro.get(chave).clientes.push(client);
     });
 
-    // Map IDs to names if missing from client object (using users list)
-    Object.keys(brokerSales).forEach((id) => {
-      if (brokerSales[id].name === "Desconhecido") {
-        const broker = parceirosList.find((u) => String(u.id) === String(id));
-        if (broker) {
-          brokerSales[id].name = broker.name;
-          brokerSales[id].sobrenome = broker.sobrenome;
-        }
-      }
+    const sortedBrokers = Array.from(porParceiro.values())
+      .map((parceiro) => {
+        // Nome pode não vir na relação embutida; completa pela lista de usuários
+        const cadastro = parceirosList.find(
+          (u) => String(u.id) === String(parceiro.id),
+        );
 
-      // Pontos = (clientes indicados * pontos por usuário) + (1 ponto para cada real do faturamento total)
-      const pontosPorCliente =
-        brokerSales[id].totalClientes *
-        Number(config.pontosPorNovoUsuario || 1);
-      const pontosPorFaturamento = Math.floor(brokerSales[id].total);
-      brokerSales[id].pontos = pontosPorCliente + pontosPorFaturamento;
-    });
+        const fechadosDoMes = parceiro.clientes.filter(
+          (c) => isContratoFechado(c) && mesmoMes(dataDeFechamento(c), agora),
+        );
 
-    const sortedBrokers = Object.values(brokerSales)
+        return {
+          id: parceiro.id,
+          name: parceiro.name || cadastro?.name || "Desconhecido",
+          sobrenome: parceiro.sobrenome || cadastro?.sobrenome || "",
+          total: faturamentoDe(parceiro.clientes),
+          count: fechadosDoMes.length,
+          totalClientes: parceiro.clientes.length,
+          pontos: calcularPontos(parceiro.clientes, config),
+        };
+      })
       .sort((a, b) => b.pontos - a.pontos)
       .slice(0, 5);
 
     setTopBrokers(sortedBrokers);
 
-    // 6. Novos Clientes (Top 5 Recent)
+    // 5. Novos Clientes (5 mais recentes)
     const sortedClients = [...clients]
-      .sort((a, b) => {
-        return new Date(b.created_at) - new Date(a.created_at);
-      })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 5);
 
     setRecentClients(sortedClients);
@@ -233,13 +213,6 @@ const Dashboard = () => {
       fetchData();
     }
   }, [userId]);
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  };
 
   const handleEditClient = (client) => {
     setSelectedCliente(client);
@@ -262,13 +235,15 @@ const Dashboard = () => {
       const token = window.localStorage.getItem("token");
       if (selectedCliente) {
         const { url, options } = PUT_CLIENTE(selectedCliente.id, data, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Cliente atualizado com sucesso!");
           fetchData(); // Refresh data
           handleCloseModal();
         } else {
-          toast.error("Erro ao atualizar cliente.");
+          toast.error(
+            await mensagemDeErro(response, "Erro ao atualizar cliente."),
+          );
         }
       }
     } catch (error) {
@@ -296,7 +271,7 @@ const Dashboard = () => {
     },
     {
       title: "Vendas no mês",
-      value: loading ? "..." : formatCurrency(stats.vendasMes),
+      value: loading ? "..." : formatarMoeda(stats.vendasMes),
       description: "Volume fechado no período",
       icon: DollarSign,
       borderColor: "border-emerald-500",
@@ -304,7 +279,7 @@ const Dashboard = () => {
     },
     {
       title: "Comissões",
-      value: loading ? "..." : formatCurrency(stats.comissoesMes),
+      value: loading ? "..." : formatarMoeda(stats.comissoesMes),
       description: `Estimadas com base em ${configuracao.comissaoPorVenda}%`,
       icon: DollarSign,
       borderColor: "border-amber-500",
@@ -315,8 +290,8 @@ const Dashboard = () => {
   const statusClassMap = {
     "Novo cliente": "bg-blue-500/10 text-blue-300",
     "Em atendimento": "bg-amber-500/10 text-amber-300",
-    "Contrato fechado": "bg-emerald-500/10 text-emerald-300",
-    "Contrato perdido": "bg-rose-500/10 text-rose-300",
+    [STATUS_FECHADO]: "bg-emerald-500/10 text-emerald-300",
+    [STATUS_PERDIDO]: "bg-rose-500/10 text-rose-300",
   };
 
   if (loading) {

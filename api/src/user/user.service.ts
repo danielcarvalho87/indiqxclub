@@ -11,12 +11,18 @@ import {
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { CreatePublicUserDto } from "./dto/create-public-user.dto";
-import { Repository, LessThan } from "typeorm";
+import { Brackets, Repository } from "typeorm";
 import { User } from "./entities/user.entity";
 import * as bcrypt from "bcrypt";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { EmailService } from "../email/email.service";
 import { isAdmin, isFullAdmin } from "../auth/roles/level.util";
+import {
+  buildPaginated,
+  escapeLike,
+  PaginationQueryDto,
+  resolvePaging,
+} from "../common/dto/pagination-query.dto";
 
 /**
  * Campos que nunca devem sair da API: hash de senha e tokens de
@@ -88,28 +94,49 @@ export class UserService {
     return sanitizeUser(createdUser);
   }
 
-  async findAll(user?: UserFromJwt) {
-    if (!user) {
-      return sanitizeUser(await this.userRepository.find());
+  async findAll(user?: UserFromJwt, query?: PaginationQueryDto) {
+    const qb = this.userRepository.createQueryBuilder("user");
+
+    // Recorte de visibilidade
+    if (user && !isFullAdmin(user.level)) {
+      if (isAdmin(user.level)) {
+        qb.andWhere(
+          new Brackets((w) => {
+            w.where("user.master_id = :scopeId", { scopeId: user.id }).orWhere(
+              "user.id = :scopeId",
+              { scopeId: user.id },
+            );
+          }),
+        );
+      } else {
+        qb.andWhere("user.id = :scopeId", { scopeId: user.id });
+      }
     }
 
-    if (isFullAdmin(user.level)) {
-      return sanitizeUser(await this.userRepository.find());
-    }
-
-    if (isAdmin(user.level)) {
-      return sanitizeUser(
-        await this.userRepository.find({
-          where: [{ master_id: user.id }, { id: user.id }],
+    const termo = query?.search?.trim();
+    if (termo) {
+      const padrao = `%${escapeLike(termo)}%`;
+      qb.andWhere(
+        new Brackets((w) => {
+          w.where("user.name LIKE :termo", { termo: padrao })
+            .orWhere("user.sobrenome LIKE :termo", { termo: padrao })
+            .orWhere("user.email LIKE :termo", { termo: padrao })
+            .orWhere("user.cpf LIKE :termo", { termo: padrao });
         }),
       );
     }
 
-    return sanitizeUser(
-      await this.userRepository.find({
-        where: { id: user.id },
-      }),
-    );
+    qb.orderBy("user.id", "DESC");
+
+    // Sem `page` a resposta continua sendo o array completo.
+    if (query?.page === undefined) {
+      return sanitizeUser(await qb.getMany());
+    }
+
+    const { page, limit, skip } = resolvePaging(query);
+    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+
+    return buildPaginated(sanitizeUser(data), total, page, limit);
   }
 
   /** Uso interno: retorna a entidade completa, incluindo campos sensíveis. */

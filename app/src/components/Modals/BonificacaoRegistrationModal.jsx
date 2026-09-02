@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, Save } from "lucide-react";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { useAuth } from "../../hooks/useAuth";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 
 const BonificacaoRegistrationModal = ({
   isOpen,
@@ -10,7 +10,6 @@ const BonificacaoRegistrationModal = ({
   onSubmit,
   initialData = null,
 }) => {
-  const { userId } = useAuth();
   const defaultFormState = {
     titulo: "",
     descricao: "",
@@ -20,9 +19,16 @@ const BonificacaoRegistrationModal = ({
 
   const [formData, setFormData] = useState(defaultFormState);
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [erros, setErros] = useState({});
+  const { backdropRef, onBackdropMouseDown, onBackdropClick } = useModalDismiss(
+    isOpen,
+    onClose,
+  );
 
   useEffect(() => {
     if (isOpen) {
+      setErros({});
       if (initialData) {
         setFormData({
           ...defaultFormState,
@@ -44,26 +50,58 @@ const BonificacaoRegistrationModal = ({
       ...prev,
       [name]: value,
     }));
+    // Limpa o erro do campo assim que o usuário começa a corrigi-lo
+    setErros((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev));
   };
 
-  const handleSubmit = (e) => {
+  const validar = () => {
+    const novos = {};
+    if (!formData.titulo.trim()) novos.titulo = "Informe o título.";
+    if (!formData.descricao.trim()) novos.descricao = "Informe a descrição.";
+
+    const pontuacao = parseInt(formData.pontuacao, 10);
+    if (!Number.isFinite(pontuacao) || pontuacao <= 0) {
+      novos.pontuacao = "A pontuação deve ser maior que zero.";
+    }
+
+    setErros(novos);
+    return Object.keys(novos).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    if (!validar()) return;
+
     // Extrair apenas os campos permitidos pelo DTO
     const { titulo, descricao, pontuacao, status } = formData;
 
     const submissionData = {
-      master_id: Number(userId),
-      userId: Number(userId),
-      titulo,
-      descricao,
-      pontuacao: parseInt(pontuacao) || 0,
+      titulo: titulo.trim(),
+      descricao: descricao.trim(),
+      pontuacao: parseInt(pontuacao, 10) || 0,
       status,
     };
-    onSubmit(submissionData);
+
+    // Trava o botão durante o envio: sem isso um duplo clique criava dois
+    // registros iguais.
+    setSaving(true);
+    try {
+      await onSubmit(submissionData);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md">
+    <div
+      ref={backdropRef}
+      onMouseDown={onBackdropMouseDown}
+      onClick={onBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(76,130,255,0.18),transparent_35%),rgba(2,6,16,0.86)] p-4 backdrop-blur-md"
+    >
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-white/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] bg-brand-surface shadow-[0_32px_120px_rgba(3,8,20,0.58)]">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-brand-border/40 bg-brand-surface px-6 py-5">
           <div>
@@ -76,6 +114,7 @@ const BonificacaoRegistrationModal = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-full border border-white/5 bg-white/[0.02] p-2 text-brand-muted transition-colors hover:bg-brand-surfaceAlt hover:text-brand-text"
           >
             <X size={24} />
@@ -98,7 +137,7 @@ const BonificacaoRegistrationModal = ({
                 name="titulo"
                 value={formData.titulo}
                 onChange={handleChange}
-                required
+                error={erros.titulo}
                 placeholder="Ex: Venda de Imóvel"
               />
 
@@ -114,6 +153,9 @@ const BonificacaoRegistrationModal = ({
                   className="w-full rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-brand-text shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 focus:border-brand-primary/45 focus:bg-brand-dark/60 focus:outline-none focus:ring-4 focus:ring-brand-primary/12"
                   placeholder="Descrição da bonificação..."
                 />
+                {erros.descricao && (
+                  <p className="text-xs text-rose-400">{erros.descricao}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -123,7 +165,8 @@ const BonificacaoRegistrationModal = ({
                   type="number"
                   value={formData.pontuacao}
                   onChange={handleChange}
-                  required
+                  error={erros.pontuacao}
+                  min="1"
                   placeholder="Ex: 100"
                 />
 
@@ -146,12 +189,22 @@ const BonificacaoRegistrationModal = ({
           </div>
 
           <div className="flex justify-end gap-3 border-t border-brand-border/40 pt-6">
-            <Button type="button" onClick={onClose} variant="outline" size="sm">
+            <Button
+              type="button"
+              onClick={onClose}
+              variant="outline"
+              size="sm"
+              disabled={saving}
+            >
               Cancelar
             </Button>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="sm" disabled={saving}>
               <Save size={18} />
-              {isEditing ? "Salvar Alterações" : "Criar Bonificação"}
+              {saving
+                ? "Salvando..."
+                : isEditing
+                  ? "Salvar Alterações"
+                  : "Criar Bonificação"}
             </Button>
           </div>
         </form>

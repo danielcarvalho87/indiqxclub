@@ -15,6 +15,7 @@ import {
   HttpCode,
   ForbiddenException,
   NotFoundException,
+  Query,
 } from "@nestjs/common";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -25,6 +26,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { Roles } from "../auth/roles/roles.decorator";
 import { AccessLevel, isAnyAdmin, isFullAdmin } from "../auth/roles/level.util";
+import { PaginationQueryDto } from "../common/dto/pagination-query.dto";
 
 /**
  * Campos que só um administrador pode definir. Enviados por um parceiro,
@@ -193,8 +195,11 @@ export class UserController {
   }
 
   @Get()
-  findAll(@CurrentUser() currentUser: UserFromJwt) {
-    return this.userService.findAll(currentUser);
+  findAll(
+    @CurrentUser() currentUser: UserFromJwt,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.userService.findAll(currentUser, query);
   }
 
   @Get(":id")

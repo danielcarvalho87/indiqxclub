@@ -11,7 +11,7 @@ import {
   PUT_BONIFICACAO,
   DELETE_BONIFICACAO,
 } from "../api";
-import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
@@ -24,35 +24,22 @@ const Bonificacoes = () => {
   const [selectedBonificacao, setSelectedBonificacao] = useState(null);
   const [bonificacaoToDelete, setBonificacaoToDelete] = useState(null);
 
-  const { userLevel, userId } = useAuth();
 
   const fetchBonificacoes = async () => {
     try {
       const token = window.localStorage.getItem("token");
       const { url, options } = GET_BONIFICACOES(token);
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       if (response.ok) {
-        let json = await response.json();
-
-        // Filtragem baseada no nível de acesso
-        if (userLevel === "FullAdmin" || userLevel === "Full Admin") {
-          // Full Admin vê todas as bonificações
-        } else if (userLevel === "Administrador" || userLevel === "Admin") {
-          // Administrador vê apenas as bonificações que ele mesmo cadastrou (baseado no master_id ou id dele)
-          json = json.filter(
-            (item) =>
-              String(item.master_id) === String(userId) ||
-              String(item.userId) === String(userId),
-          );
-        }
-
-        setBonificacoes(json);
+        // A API já devolve apenas as bonificações da empresa do usuário.
+        setBonificacoes(await response.json());
       } else {
-        toast.error("Erro ao carregar bonificações.");
+        toast.error(
+          await mensagemDeErro(response, "Erro ao carregar bonificações."),
+        );
       }
     } catch (error) {
       console.error("Erro:", error);
-      toast.error("Erro de conexão.");
     } finally {
       setLoading(false);
     }
@@ -91,23 +78,27 @@ const Bonificacoes = () => {
           data,
           token,
         );
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Bonificação atualizada com sucesso!");
           fetchBonificacoes();
           handleCloseModal();
         } else {
-          toast.error("Erro ao atualizar bonificação.");
+          toast.error(
+            await mensagemDeErro(response, "Erro ao atualizar bonificação."),
+          );
         }
       } else {
         const { url, options } = POST_BONIFICACAO(data, token);
-        const response = await fetch(url, options);
+        const response = await apiFetch(url, options);
         if (response.ok) {
           toast.success("Bonificação criada com sucesso!");
           fetchBonificacoes();
           handleCloseModal();
         } else {
-          toast.error("Erro ao criar bonificação.");
+          toast.error(
+            await mensagemDeErro(response, "Erro ao criar bonificação."),
+          );
         }
       }
     } catch (error) {
@@ -124,13 +115,15 @@ const Bonificacoes = () => {
         bonificacaoToDelete.id,
         token,
       );
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       if (response.ok) {
         toast.success("Bonificação excluída com sucesso!");
         fetchBonificacoes();
         handleCloseConfirmDelete();
       } else {
-        toast.error("Erro ao excluir bonificação.");
+        toast.error(
+          await mensagemDeErro(response, "Erro ao excluir bonificação."),
+        );
       }
     } catch (error) {
       console.error("Erro:", error);

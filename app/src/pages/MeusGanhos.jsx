@@ -14,16 +14,24 @@ import {
 import { Card } from "../components/ui/Card";
 import { GET_CLIENTES, GET_BONIFICACOES, GET_CONFIGURACOES } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import {
+  CONFIG_PADRAO,
+  calcularComissao,
+  calcularPontos,
+  corretorIdDe,
+  faturamentoDe,
+  formatarMoeda,
+  formatarPontos,
+  normalizarConfiguracao,
+} from "../utils/pontos";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
 const MeusGanhos = () => {
   const { userId, userLevel, masterId } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [configuracao, setConfiguracao] = useState({
-    pontosPorNovoUsuario: 1, // default
-    comissaoPorVenda: 5, // default 5%
-  });
+  const [configuracao, setConfiguracao] = useState(CONFIG_PADRAO);
   const [stats, setStats] = useState({
     clientesIndicados: 0,
     faturamentoTotal: 0,
@@ -46,7 +54,7 @@ const MeusGanhos = () => {
           ? userId
           : masterId;
 
-      let configData = { pontosPorNovoUsuario: 1, comissaoPorVenda: 5 }; // default fallback
+      let configData = { ...CONFIG_PADRAO };
 
       if (targetMasterId) {
         try {
@@ -54,21 +62,12 @@ const MeusGanhos = () => {
             targetMasterId,
             token,
           );
-          const resConfig = await fetch(urlConfig, optionsConfig);
+          const resConfig = await apiFetch(urlConfig, optionsConfig);
           if (resConfig.ok) {
             const configs = await resConfig.json();
             if (configs && configs.length > 0) {
               // Pega a primeira configuração encontrada
-              configData = {
-                pontosPorNovoUsuario:
-                  configs[0].pontos_por_novo_usuario ||
-                  configs[0].pontosPorNovoUsuario ||
-                  1,
-                comissaoPorVenda:
-                  configs[0].comissao_por_venda ||
-                  configs[0].comissaoPorVenda ||
-                  5,
-              };
+              configData = normalizarConfiguracao(configs[0]);
             }
           }
         } catch (error) {
@@ -77,30 +76,30 @@ const MeusGanhos = () => {
       }
       setConfiguracao(configData);
 
-      // Fetch Clientes
       const { url: urlClientes, options: optionsClientes } =
         GET_CLIENTES(token);
-      const resClientes = await fetch(urlClientes, optionsClientes);
-      const clientes = await resClientes.json();
-
-      // Fetch Bonificacoes
       const { url: urlBonificacoes, options: optionsBonificacoes } =
         GET_BONIFICACOES(token);
-      const resBonificacoes = await fetch(urlBonificacoes, optionsBonificacoes);
-      let bonificacoesData = await resBonificacoes.json();
 
-      // Filtrar bonificações baseado no nível de acesso
-      if (userLevel === "Parceiro" || userLevel === "Corretor") {
-        bonificacoesData = bonificacoesData.filter(
-          (b) => String(b.userId) === String(masterId) || String(b.master_id) === String(masterId)
+      const [resClientes, resBonificacoes] = await Promise.all([
+        apiFetch(urlClientes, optionsClientes),
+        apiFetch(urlBonificacoes, optionsBonificacoes),
+      ]);
+
+      if (!resClientes.ok || !resBonificacoes.ok) {
+        toast.error(
+          await mensagemDeErro(
+            resClientes.ok ? resBonificacoes : resClientes,
+            "Erro ao carregar seus ganhos.",
+          ),
         );
-      } else if (userLevel === "Administrador" || userLevel === "Admin") {
-        bonificacoesData = bonificacoesData.filter(
-          (b) => String(b.userId) === String(userId) || String(b.master_id) === String(userId)
-        );
+        return;
       }
 
-      // Filtrar e Calcular
+      const clientes = await resClientes.json();
+      // A API já entrega apenas as bonificações da empresa do usuário.
+      const bonificacoesData = await resBonificacoes.json();
+
       processData(clientes, bonificacoesData, configData);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -112,31 +111,14 @@ const MeusGanhos = () => {
 
   const processData = (clientes, bonificacoesData, configData) => {
     // Filtrar clientes do usuário logado
-    const meusClientes = clientes.filter((c) => {
-      const parceiroId = c.corretor?.id || c.corretor_id;
-      return parceiroId && String(parceiroId) === String(userId);
-    });
-
-    const clientesIndicados = meusClientes.length;
-
-    // Filtrar contratos fechados
-    const contratosFechados = meusClientes.filter(
-      (c) => c.status === "Contrato fechado",
+    const meusClientes = clientes.filter(
+      (c) => String(corretorIdDe(c)) === String(userId),
     );
 
-    // Calcular Faturamento e Pontos
-    const faturamentoTotal = contratosFechados.reduce((acc, curr) => {
-      return acc + Number(curr.valor_contrato || 0);
-    }, 0);
-
-    // Pontos = (clientes indicados * pontos por usuário) + (1 ponto para cada real do faturamento total)
-    const pontosAcumulados =
-      clientesIndicados * Number(configData.pontosPorNovoUsuario) +
-      Math.floor(faturamentoTotal);
-
-    // Comissão é baseada na porcentagem configurada sobre o faturamento total
-    const comissaoEstimada =
-      faturamentoTotal * (Number(configData.comissaoPorVenda) / 100);
+    const clientesIndicados = meusClientes.length;
+    const faturamentoTotal = faturamentoDe(meusClientes);
+    const pontosAcumulados = calcularPontos(meusClientes, configData);
+    const comissaoEstimada = calcularComissao(faturamentoTotal, configData);
 
     setStats({
       clientesIndicados,
@@ -163,17 +145,6 @@ const MeusGanhos = () => {
       fetchData();
     }
   }, [userId]);
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  };
-
-  const formatPoints = (value) => {
-    return new Intl.NumberFormat("pt-BR").format(value);
-  };
 
   // Calcular progresso total para a barra global
   const maxPoints =
@@ -213,7 +184,7 @@ const MeusGanhos = () => {
               <p className="text-sm text-brand-text font-medium">
                 Faltam{" "}
                 <span className="text-brand-primary font-bold">
-                  {formatPoints(nextGoal.pontuacao - stats.pontosAcumulados)}
+                  {formatarPontos(nextGoal.pontuacao - stats.pontosAcumulados)}
                 </span>{" "}
                 pontos
               </p>
@@ -263,7 +234,7 @@ const MeusGanhos = () => {
               </p>
             </div>
             <h3 className="text-2xl font-bold text-brand-text mt-2 tracking-tight">
-              {formatCurrency(stats.faturamentoTotal)}
+              {formatarMoeda(stats.faturamentoTotal)}
             </h3>
             <p className="text-xs text-brand-muted mt-1">Contratos fechados</p>
           </div>
@@ -286,7 +257,7 @@ const MeusGanhos = () => {
               </p>
             </div>
             <h3 className="text-2xl font-bold text-brand-text mt-2 text-brand-primary tracking-tight">
-              {formatPoints(stats.pontosAcumulados)}
+              {formatarPontos(stats.pontosAcumulados)}
             </h3>
             <p className="text-xs text-brand-muted mt-1">
               {configuracao.pontosPorNovoUsuario} Pontos por Cliente
@@ -311,7 +282,7 @@ const MeusGanhos = () => {
               </p>
             </div>
             <h3 className="text-2xl font-bold text-brand-text mt-2 tracking-tight">
-              {formatCurrency(stats.comissaoEstimada)}
+              {formatarMoeda(stats.comissaoEstimada)}
             </h3>
             <p className="text-xs text-brand-muted mt-1">
               Estimativa de ganhos
@@ -415,7 +386,7 @@ const MeusGanhos = () => {
                           {bonificacao.titulo}
                         </h3>
                         <span className="text-sm font-mono text-brand-muted">
-                          {formatPoints(bonificacao.pontuacao)} pts
+                          {formatarPontos(bonificacao.pontuacao)} pts
                         </span>
                       </div>
 

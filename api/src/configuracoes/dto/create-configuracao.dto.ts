@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsString, IsNumber, Min, Length } from "class-validator";
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsNumber,
+  Min,
+  Length,
+} from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateConfiguracaoDto {
@@ -24,6 +31,15 @@ export class CreateConfiguracaoDto {
   @IsNumber()
   @Min(0)
   pontosPorNovoUsuario: number;
+
+  @ApiProperty({
+    description: "Pontos concedidos por real faturado",
+    default: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pontosPorReal?: number;
 
   @ApiProperty({ description: "Comissão por venda (%)" })
   @IsNotEmpty()

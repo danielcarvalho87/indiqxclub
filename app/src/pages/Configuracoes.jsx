@@ -4,8 +4,11 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Copy, Check } from "lucide-react";
+import { maskCNPJ } from "../utils/masks";
 import { GET_CONFIGURACOES, POST_CONFIGURACAO, PUT_CONFIGURACAO } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { apiFetch, mensagemDeErro } from "../lib/http";
+import { CONFIG_PADRAO } from "../utils/pontos";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 
@@ -20,6 +23,7 @@ const Configuracoes = () => {
     nomeEmpresa: "",
     cnpj: "",
     pontosPorNovoUsuario: "",
+    pontosPorReal: "",
     comissaoPorVenda: "",
   });
 
@@ -34,7 +38,7 @@ const Configuracoes = () => {
     try {
       const token = window.localStorage.getItem("token");
       const { url, options } = GET_CONFIGURACOES(userId, token);
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
 
       if (response.ok) {
         const json = await response.json();
@@ -44,8 +48,10 @@ const Configuracoes = () => {
           setFormData({
             nomeEmpresa: config.nomeEmpresa || "",
             cnpj: config.cnpj || "",
-            pontosPorNovoUsuario: config.pontosPorNovoUsuario || "",
-            comissaoPorVenda: config.comissaoPorVenda || "",
+            pontosPorNovoUsuario: config.pontosPorNovoUsuario ?? "",
+            pontosPorReal:
+              config.pontosPorReal ?? CONFIG_PADRAO.pontosPorReal,
+            comissaoPorVenda: config.comissaoPorVenda ?? "",
           });
         }
       }
@@ -61,11 +67,25 @@ const Configuracoes = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: name === "cnpj" ? maskCNPJ(value) : value,
     }));
   };
 
   const linkCadastro = `${window.location.origin}/register?ref=${userId}`;
+
+  // Mostra na hora o efeito dos dois parâmetros de pontuação.
+  const simulacao = (() => {
+    const porIndicacao = 10 * (Number(formData.pontosPorNovoUsuario) || 0);
+    const porFaturamento = Math.floor(
+      5000 * (Number(formData.pontosPorReal) || 0),
+    );
+    if (!porIndicacao && !porFaturamento) return null;
+    return {
+      porIndicacao,
+      porFaturamento,
+      total: porIndicacao + porFaturamento,
+    };
+  })();
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(linkCadastro);
@@ -85,16 +105,17 @@ const Configuracoes = () => {
         nomeEmpresa: formData.nomeEmpresa,
         cnpj: formData.cnpj,
         pontosPorNovoUsuario: Number(formData.pontosPorNovoUsuario),
+        pontosPorReal: Number(formData.pontosPorReal),
         comissaoPorVenda: Number(formData.comissaoPorVenda),
       };
 
       let response;
       if (configId) {
         const { url, options } = PUT_CONFIGURACAO(configId, payload, token);
-        response = await fetch(url, options);
+        response = await apiFetch(url, options);
       } else {
         const { url, options } = POST_CONFIGURACAO(payload, token);
-        response = await fetch(url, options);
+        response = await apiFetch(url, options);
       }
 
       if (response.ok) {
@@ -102,8 +123,9 @@ const Configuracoes = () => {
         if (!configId && json.id) setConfigId(json.id);
         toast.success("Configurações salvas com sucesso!");
       } else {
-        const err = await response.json();
-        toast.error(err.message || "Erro ao salvar configurações");
+        toast.error(
+          await mensagemDeErro(response, "Erro ao salvar configurações"),
+        );
       }
     } catch (error) {
       console.error("Erro ao salvar:", error);
@@ -185,6 +207,7 @@ const Configuracoes = () => {
                 value={formData.cnpj}
                 onChange={handleChange}
                 placeholder="00.000.000/0000-00"
+                maxLength={18}
                 required
               />
             </div>
@@ -207,6 +230,46 @@ const Configuracoes = () => {
                 cliente
               </p>
             </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-brand-text/90">
+                Pontos por Real Faturado
+              </label>
+              <Input
+                type="number"
+                name="pontosPorReal"
+                value={formData.pontosPorReal}
+                onChange={handleChange}
+                placeholder="Ex: 1"
+                step="0.01"
+                min="0"
+                required
+              />
+              <p className="mt-1 text-xs text-brand-text/50">
+                Quantos pontos cada R$ 1,00 de contrato fechado gera. Com o
+                valor em 1, um contrato de R$ 5.000 vale 5.000 pontos — o que
+                torna os pontos por indicação pouco relevantes. Reduza aqui
+                para dar mais peso às indicações.
+              </p>
+            </div>
+
+            {simulacao && (
+              <div className="rounded-lg border border-brand-primary/25 bg-brand-primary/5 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-brand-primary">
+                  Simulação
+                </p>
+                <p className="mt-2 text-sm text-brand-text/80">
+                  Um parceiro com <strong>10 indicações</strong> e{" "}
+                  <strong>1 contrato de R$ 5.000</strong> acumularia{" "}
+                  <strong className="text-brand-primary">
+                    {simulacao.total.toLocaleString("pt-BR")} pontos
+                  </strong>{" "}
+                  — {simulacao.porIndicacao.toLocaleString("pt-BR")} pelas
+                  indicações e {simulacao.porFaturamento.toLocaleString("pt-BR")}{" "}
+                  pelo faturamento.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-brand-text/90">

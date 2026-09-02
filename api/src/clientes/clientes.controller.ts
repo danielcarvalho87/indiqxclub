@@ -6,15 +6,14 @@ import {
   Patch,
   Param,
   Delete,
-  Request,
-  UseGuards,
+  Query,
 } from "@nestjs/common";
 import { ClientesService } from "./clientes.service";
 import { CreateClienteDto } from "./dto/create-cliente.dto";
 import { UpdateClienteDto } from "./dto/update-cliente.dto";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
+import { PaginationQueryDto } from "../common/dto/pagination-query.dto";
 
 @Controller("clientes")
 export class ClientesController {
@@ -29,8 +28,11 @@ export class ClientesController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: UserFromJwt) {
-    return this.clientesService.findAll(user);
+  findAll(
+    @CurrentUser() user: UserFromJwt,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.clientesService.findAll(user, query);
   }
 
   @Get(":id")

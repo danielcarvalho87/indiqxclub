@@ -4,7 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from "@nestjs/common";
-import { Repository } from "typeorm";
+import { Brackets, Repository, SelectQueryBuilder } from "typeorm";
 import { Cliente } from "./entities/cliente.entity";
 import { CreateClienteDto } from "./dto/create-cliente.dto";
 import { UpdateClienteDto } from "./dto/update-cliente.dto";
@@ -12,6 +12,12 @@ import { EmailService } from "../email/email.service";
 import { UserService } from "../user/user.service";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { isAdmin, isFullAdmin } from "../auth/roles/level.util";
+import {
+  buildPaginated,
+  escapeLike,
+  PaginationQueryDto,
+  resolvePaging,
+} from "../common/dto/pagination-query.dto";
 
 @Injectable()
 export class ClientesService {
@@ -143,23 +149,57 @@ export class ClientesService {
     return novoCliente;
   }
 
-  async findAll(user: UserFromJwt) {
+  /** Aplica o recorte de visibilidade do usuário sobre a query. */
+  private applyScope(qb: SelectQueryBuilder<Cliente>, user: UserFromJwt) {
     if (isFullAdmin(user.level)) {
-      return this.baseQuery().orderBy("cliente.created_at", "DESC").getMany();
+      return qb;
     }
 
     if (isAdmin(user.level)) {
-      return this.baseQuery()
-        .where("corretor.master_id = :userId", { userId: user.id })
-        .orWhere("cliente.corretor_id = :userId", { userId: user.id })
-        .orderBy("cliente.created_at", "DESC")
-        .getMany();
+      return qb.andWhere(
+        new Brackets((w) => {
+          w.where("corretor.master_id = :scopeId", { scopeId: user.id }).orWhere(
+            "cliente.corretor_id = :scopeId",
+            { scopeId: user.id },
+          );
+        }),
+      );
     }
 
-    return this.baseQuery()
-      .where("cliente.corretor_id = :userId", { userId: user.id })
-      .orderBy("cliente.created_at", "DESC")
-      .getMany();
+    return qb.andWhere("cliente.corretor_id = :scopeId", { scopeId: user.id });
+  }
+
+  async findAll(user: UserFromJwt, query?: PaginationQueryDto) {
+    const qb = this.applyScope(this.baseQuery(), user).orderBy(
+      "cliente.created_at",
+      "DESC",
+    );
+
+    const termo = query?.search?.trim();
+    if (termo) {
+      const padrao = `%${escapeLike(termo)}%`;
+      qb.andWhere(
+        new Brackets((w) => {
+          w.where("cliente.nome LIKE :termo", { termo: padrao })
+            .orWhere("cliente.sobrenome LIKE :termo", { termo: padrao })
+            .orWhere("cliente.email LIKE :termo", { termo: padrao })
+            .orWhere("cliente.telefone LIKE :termo", { termo: padrao })
+            .orWhere("corretor.name LIKE :termo", { termo: padrao })
+            .orWhere("corretor.sobrenome LIKE :termo", { termo: padrao });
+        }),
+      );
+    }
+
+    // Sem `page` a resposta continua sendo o array completo (dashboard,
+    // relatórios e "meus ganhos" agregam sobre a base inteira).
+    if (query?.page === undefined) {
+      return qb.getMany();
+    }
+
+    const { page, limit, skip } = resolvePaging(query);
+    const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
+
+    return buildPaginated(data, total, page, limit);
   }
 
   async findOne(id: number, user: UserFromJwt) {
@@ -183,13 +223,26 @@ export class ClientesService {
       data.corretor_id = await this.resolveCorretorId(data.corretor_id, user);
     }
 
+    const virouFechado =
+      data.status === "Contrato fechado" &&
+      clienteAntigo.status !== "Contrato fechado";
+
+    // A data de fechamento é do servidor. Antes os relatórios usavam
+    // updated_at, que muda a cada edição do cadastro.
+    if (virouFechado) {
+      (data as Cliente).data_fechamento = new Date();
+    } else if (
+      data.status &&
+      data.status !== "Contrato fechado" &&
+      clienteAntigo.status === "Contrato fechado"
+    ) {
+      // Contrato reaberto: a data anterior deixa de valer.
+      (data as Cliente).data_fechamento = null;
+    }
+
     const result = await this.clienteRepository.update(id, data);
 
-    // Se o status mudou para "Contrato fechado" e antes não era
-    if (
-      data.status === "Contrato fechado" &&
-      clienteAntigo.status !== "Contrato fechado"
-    ) {
+    if (virouFechado) {
       try {
         const valorContrato =
           data.valor_contrato || clienteAntigo.valor_contrato || 0;

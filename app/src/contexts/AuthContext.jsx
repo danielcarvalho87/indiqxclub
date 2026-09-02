@@ -1,6 +1,7 @@
-import { useState, useEffect, createContext } from "react";
+import { useState, useEffect, useRef, createContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { TOKEN_POST, GET_USER } from "./../api";
+import { apiFetch, registerUnauthorizedHandler } from "../lib/http";
 
 export const AuthContext = createContext();
 
@@ -10,6 +11,7 @@ export const AuthProvider = ({ children }) => {
   const WARNING_DURATION = 5 * 60 * 1000; // 5 minutes
 
   const [showSessionWarning, setShowSessionWarning] = useState(false);
+  const ultimaAtividade = useRef(0);
 
   const [authState, setAuthState] = useState(() => {
     // Recupera o estado do localStorage se existir
@@ -61,10 +63,50 @@ export const AuthProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // Renova a sessão enquanto o usuário está trabalhando. Antes o prazo só era
+  // estendido no login ou pelo botão do modal, então quem estava no meio de um
+  // formulário era deslogado aos 30 minutos e perdia o que havia digitado.
+  useEffect(() => {
+    const eventos = ["mousedown", "keydown", "scroll", "touchstart"];
+
+    const registrarAtividade = () => {
+      // Com o aviso na tela a renovação passa a ser uma escolha explícita.
+      if (showSessionWarning) return;
+      if (!localStorage.getItem("token")) return;
+
+      // Grava no máximo uma vez por minuto para não escrever a cada tecla.
+      const agora = Date.now();
+      if (agora - ultimaAtividade.current < 60000) return;
+      ultimaAtividade.current = agora;
+
+      updateSessionExpiry();
+    };
+
+    eventos.forEach((evento) =>
+      window.addEventListener(evento, registrarAtividade, { passive: true }),
+    );
+
+    return () =>
+      eventos.forEach((evento) =>
+        window.removeEventListener(evento, registrarAtividade),
+      );
+  }, [showSessionWarning]);
+
+  // Qualquer 401 vindo da API encerra a sessão em todas as telas de uma vez.
+  useEffect(() => {
+    registerUnauthorizedHandler(() => {
+      if (localStorage.getItem("token")) {
+        userLogout();
+      }
+    });
+
+    return () => registerUnauthorizedHandler(null);
+  }, []);
+
   async function getUser(token) {
     try {
       const { url, options } = GET_USER(token);
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -204,6 +246,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         // Definir tempo de expiração da sessão
+        ultimaAtividade.current = Date.now();
         updateSessionExpiry();
 
         return true;
