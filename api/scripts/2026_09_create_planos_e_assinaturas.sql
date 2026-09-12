@@ -44,11 +44,19 @@ CREATE TABLE IF NOT EXISTS assinaturas (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Catálogo inicial. INSERT IGNORE preserva ajustes de preço feitos depois.
+-- O valor anual é 15% abaixo de doze mensalidades, arredondado ao real.
 INSERT IGNORE INTO planos
   (slug, nome, limite_parceiros, preco_mensal, preco_anual, preco_parceiro_extra, descricao, destaque, ativo, ordem)
 VALUES
   ('free',       'Free',       3,    0.00,    0.00,    NULL,  'Para começar e testar a plataforma.',            0, 1, 1),
-  ('start',      'Start',      10,   127.00,  1270.00, 19.00, 'Equipe pequena, até 10 parceiros ativos.',       0, 1, 2),
-  ('growth',     'Growth',     30,   297.00,  2970.00, 14.00, 'O mais escolhido: até 30 parceiros ativos.',     1, 1, 3),
-  ('scale',      'Scale',      100,  697.00,  6970.00, 9.00,  'Operação consolidada, até 100 parceiros.',       0, 1, 4),
+  ('start',      'Start',      10,   127.00,  1295.00, 19.00, 'Equipe pequena, até 10 parceiros ativos.',       0, 1, 2),
+  ('growth',     'Growth',     30,   297.00,  3029.00, 14.00, 'O mais escolhido: até 30 parceiros ativos.',     1, 1, 3),
+  ('scale',      'Scale',      100,  697.00,  7109.00, 9.00,  'Operação consolidada, até 100 parceiros.',       0, 1, 4),
   ('enterprise', 'Enterprise', NULL, 1497.00, 0.00,    NULL,  'Parceiros ilimitados, valor anual negociado.',   0, 1, 5);
+
+-- Reajuste do ciclo anual para 15% de desconto.
+-- Necessário apenas em bancos que já rodaram a versão anterior deste
+-- script, onde o INSERT IGNORE acima não sobrescreve os valores.
+UPDATE planos SET preco_anual = 1295.00 WHERE slug = 'start'      AND preco_anual = 1270.00;
+UPDATE planos SET preco_anual = 3029.00 WHERE slug = 'growth'     AND preco_anual = 2970.00;
+UPDATE planos SET preco_anual = 7109.00 WHERE slug = 'scale'      AND preco_anual = 6970.00;

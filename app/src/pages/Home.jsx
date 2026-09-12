@@ -129,7 +129,7 @@ const planos = [
     nome: "Start",
     parceiros: "até 10 parceiros",
     mensal: 127,
-    anual: 1270,
+    anual: 1295,
     extra: 19,
     resumo: "Primeira equipe formada e operação em ritmo.",
     recursos: [
@@ -142,7 +142,7 @@ const planos = [
     nome: "Growth",
     parceiros: "até 30 parceiros",
     mensal: 297,
-    anual: 2970,
+    anual: 3029,
     extra: 14,
     destaque: true,
     resumo: "O mais escolhido por quem já vive de indicação.",
@@ -157,7 +157,7 @@ const planos = [
     nome: "Scale",
     parceiros: "até 100 parceiros",
     mensal: 697,
-    anual: 6970,
+    anual: 7109,
     extra: 9,
     resumo: "Operação consolidada, com várias frentes ativas.",
     recursos: [
@@ -208,6 +208,9 @@ const perguntas = [
       "Fale com a gente pelo WhatsApp. Criamos sua conta de administrador e configuramos a empresa junto com você.",
   },
 ];
+
+/** Desconto do ciclo anual sobre doze mensalidades. */
+const DESCONTO_ANUAL = 0.15;
 
 function formatarPreco(valor) {
   return new Intl.NumberFormat("pt-BR", {
@@ -344,7 +347,10 @@ const Home = () => {
       <main id="conteudo">
         {/* Hero */}
         <section className="relative overflow-hidden border-b border-white/5">
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+          >
             <div className="brilho-lento absolute left-1/2 top-[-20rem] h-[34rem] w-[34rem] rounded-full bg-brand-primary/25 blur-[130px]" />
             <div
               className="brilho-lento absolute left-[18%] top-[6rem] h-[20rem] w-[20rem] rounded-full bg-brand-secondary/15 blur-[110px]"
@@ -501,15 +507,15 @@ const Home = () => {
                   className="borda-gradiente group rounded-[25px] p-px transition-transform duration-200 hover:-translate-y-1"
                 >
                   <div className="h-full rounded-[24px] bg-brand-surface p-6 transition-colors duration-200 group-hover:bg-brand-surfaceAlt">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary/25 to-brand-primary/5 text-brand-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform duration-200 group-hover:scale-105">
-                    <Icone size={22} />
-                  </span>
-                  <h3 className="mt-5 text-lg font-bold leading-snug">
-                    {titulo}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-brand-muted">
-                    {texto}
-                  </p>
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary/25 to-brand-primary/5 text-brand-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform duration-200 group-hover:scale-105">
+                      <Icone size={22} />
+                    </span>
+                    <h3 className="mt-5 text-lg font-bold leading-snug">
+                      {titulo}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-brand-muted">
+                      {texto}
+                    </p>
                   </div>
                 </article>
               ))}
@@ -653,7 +659,11 @@ const Home = () => {
               </h2>
               <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-brand-muted">
                 O limite conta apenas parceiros ativos. Cadastro aguardando
-                aprovação não ocupa vaga.
+                aprovação não ocupa vaga. No plano anual você paga{" "}
+                <strong className="font-semibold text-brand-text">
+                  {Math.round(DESCONTO_ANUAL * 100)}% a menos
+                </strong>{" "}
+                que doze mensalidades.
               </p>
 
               <div
@@ -685,7 +695,7 @@ const Home = () => {
                 >
                   Anual
                   <span className="ml-2 text-xs font-bold text-emerald-400">
-                    2 meses grátis
+                    economize {Math.round(DESCONTO_ANUAL * 100)}%
                   </span>
                 </button>
               </div>
@@ -712,71 +722,80 @@ const Home = () => {
                           : "bg-brand-surface"
                       }`}
                     >
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-lg font-bold">{plano.nome}</h3>
-                      {plano.destaque && (
-                        <span className="rounded-full bg-gradient-to-r from-brand-primary to-brand-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-lg shadow-brand-primary/30">
-                          Mais escolhido
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-1 text-sm text-brand-muted">
-                      {plano.parceiros}
-                    </p>
-
-                    <p className="mt-5 flex items-baseline gap-1.5">
-                      {negociado ? (
-                        <span className="text-2xl font-extrabold">
-                          Sob consulta
-                        </span>
-                      ) : (
-                        <>
-                          <span className="bg-gradient-to-br from-white to-brand-muted bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
-                            {formatarPreco(preco)}
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-lg font-bold">{plano.nome}</h3>
+                        {plano.destaque && (
+                          <span className="rounded-full bg-gradient-to-r from-brand-primary to-brand-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-lg shadow-brand-primary/30">
+                            Mais escolhido
                           </span>
-                          <span className="text-sm text-brand-muted">
-                            {anual ? "/ano" : "/mês"}
+                        )}
+                      </div>
+
+                      <p className="mt-1 text-sm text-brand-muted">
+                        {plano.parceiros}
+                      </p>
+
+                      <p className="mt-5 flex items-baseline gap-1.5">
+                        {negociado ? (
+                          <span className="text-2xl font-extrabold">
+                            Sob consulta
                           </span>
-                        </>
+                        ) : (
+                          <>
+                            <span className="bg-gradient-to-br from-white to-brand-muted bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
+                              {formatarPreco(preco)}
+                            </span>
+                            <span className="text-sm text-brand-muted">
+                              {anual ? "/ano" : "/mês"}
+                            </span>
+                          </>
+                        )}
+                      </p>
+
+                      {anual && !negociado && (
+                        <p className="mt-1 text-xs font-medium text-emerald-400">
+                          Equivale a {formatarPreco(plano.anual / 12)} por mês.
+                          Economia de{" "}
+                          {formatarPreco(plano.mensal * 12 - plano.anual)} no
+                          ano.
+                        </p>
                       )}
-                    </p>
 
-                    <p className="mt-2 min-h-[2.5rem] text-xs leading-relaxed text-brand-muted">
-                      {plano.extra
-                        ? `Parceiro extra por ${formatarPreco(plano.extra)}.`
-                        : plano.resumo}
-                    </p>
+                      <p className="mt-2 min-h-[2.5rem] text-xs leading-relaxed text-brand-muted">
+                        {plano.extra
+                          ? `Parceiro extra por ${formatarPreco(plano.extra)}.`
+                          : plano.resumo}
+                      </p>
 
-                    <ul className="mt-5 flex-1 space-y-2.5 text-sm text-brand-muted">
-                      {plano.recursos.map((recurso) => (
-                        <li key={recurso} className="flex gap-2.5">
-                          <Check
-                            size={16}
-                            className="mt-0.5 shrink-0 text-brand-primary"
-                          />
-                          <span>{recurso}</span>
-                        </li>
-                      ))}
-                    </ul>
+                      <ul className="mt-5 flex-1 space-y-2.5 text-sm text-brand-muted">
+                        {plano.recursos.map((recurso) => (
+                          <li key={recurso} className="flex gap-2.5">
+                            <Check
+                              size={16}
+                              className="mt-0.5 shrink-0 text-brand-primary"
+                            />
+                            <span>{recurso}</span>
+                          </li>
+                        ))}
+                      </ul>
 
-                    <a
-                      href={linkWhatsApp(
-                        `Olá! Tenho interesse no plano ${plano.nome} do IndiqX Club${
-                          negociado ? "" : anual ? " (anual)" : " (mensal)"
-                        }.`,
-                      )}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all duration-200 ${
-                        plano.destaque
-                          ? "bg-gradient-to-r from-brand-primary to-brand-secondary text-white shadow-lg shadow-brand-primary/25 hover:brightness-110"
-                          : "border border-white/10 text-brand-text hover:border-brand-primary/40 hover:bg-white/5"
-                      }`}
-                    >
-                      <MessageCircle size={16} />
-                      Contratar pelo WhatsApp
-                    </a>
+                      <a
+                        href={linkWhatsApp(
+                          `Olá! Tenho interesse no plano ${plano.nome} do IndiqX Club${
+                            negociado ? "" : anual ? " (anual)" : " (mensal)"
+                          }.`,
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all duration-200 ${
+                          plano.destaque
+                            ? "bg-gradient-to-r from-brand-primary to-brand-secondary text-white shadow-lg shadow-brand-primary/25 hover:brightness-110"
+                            : "border border-white/10 text-brand-text hover:border-brand-primary/40 hover:bg-white/5"
+                        }`}
+                      >
+                        <MessageCircle size={16} />
+                        Contratar pelo WhatsApp
+                      </a>
                     </div>
                   </article>
                 );
