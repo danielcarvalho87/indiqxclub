@@ -14,6 +14,7 @@ import { CreatePublicUserDto } from "./dto/create-public-user.dto";
 import { Brackets, Repository } from "typeorm";
 import { User } from "./entities/user.entity";
 import * as bcrypt from "bcrypt";
+import * as crypto from "crypto";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { EmailService } from "../email/email.service";
 import { isAdmin, isFullAdmin } from "../auth/roles/level.util";
@@ -35,6 +36,9 @@ const SENSITIVE_FIELDS = [
   "email_verification_token",
   "email_verification_expires",
 ] as const;
+
+/** Validade do link de confirmação de e-mail, em horas. */
+export const EMAIL_VERIFICATION_TTL_HORAS = 24;
 
 /** Remove campos sensíveis de um usuário (ou de uma lista deles). */
 export function sanitizeUser<T>(user: T): T;
@@ -328,6 +332,49 @@ export class UserService {
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
     return sanitizeUser(user) as User;
+  }
+
+  /**
+   * Emite um novo token de confirmação de e-mail com a validade padrão.
+   * Centralizado aqui porque o prazo de 24h estava repetido em cada
+   * endpoint que reenvia o link.
+   */
+  async issueEmailVerificationToken(
+    userId: number,
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(
+      Date.now() + EMAIL_VERIFICATION_TTL_HORAS * 60 * 60 * 1000,
+    );
+
+    await this.updateEmailVerificationToken(userId, token, expiresAt);
+
+    return { token, expiresAt };
+  }
+
+  /**
+   * Situação da confirmação de e-mail de um usuário, para o aviso exibido
+   * no painel. Não devolve o token, apenas o prazo.
+   */
+  async getEmailVerificationStatus(userId: number) {
+    const user = await this.findOneRaw(userId);
+
+    if (!user) {
+      return null;
+    }
+
+    const expiresAt = user.email_verification_expires
+      ? new Date(user.email_verification_expires)
+      : null;
+
+    return {
+      email: user.email,
+      email_verified: !!user.email_verified,
+      expires_at: expiresAt,
+      // Sem token válido o parceiro precisa pedir um novo link.
+      expired: !user.email_verified && (!expiresAt || expiresAt < new Date()),
+      validade_horas: EMAIL_VERIFICATION_TTL_HORAS,
+    };
   }
 
   /**

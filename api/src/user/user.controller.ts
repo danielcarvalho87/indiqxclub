@@ -20,6 +20,7 @@ import {
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserService, sanitizeUser } from "./user.service";
+import { EmailService } from "../email/email.service";
 
 import { IsPublic } from "../auth/decorators/is-public.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -27,6 +28,7 @@ import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { Roles } from "../auth/roles/roles.decorator";
 import { AccessLevel, isAnyAdmin, isFullAdmin } from "../auth/roles/level.util";
 import { PaginationQueryDto } from "../common/dto/pagination-query.dto";
+import { Throttle } from "@nestjs/throttler";
 
 /**
  * Campos que só um administrador pode definir. Enviados por um parceiro,
@@ -55,7 +57,10 @@ const NEVER_WRITABLE_FIELDS = [
 
 @Controller("user")
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly emailService: EmailService,
+  ) {}
 
   // ============================================
   // IMPORTANTE: Rotas estáticas ANTES de rotas com :id
@@ -90,6 +95,70 @@ export class UserController {
     }
 
     return user;
+  }
+
+  /**
+   * Situação da confirmação de e-mail do usuário autenticado
+   * GET /user/me/email-verification
+   *
+   * Alimenta o aviso do painel de quem entrou sem ter clicado no link.
+   */
+  @Get("me/email-verification")
+  async getMyEmailVerification(@CurrentUser() currentUser: UserFromJwt) {
+    const status = await this.userService.getEmailVerificationStatus(
+      currentUser.id,
+    );
+
+    if (!status) {
+      throw new NotFoundException("Usuário não encontrado");
+    }
+
+    return status;
+  }
+
+  /**
+   * Reenvia o link de confirmação para o próprio e-mail
+   * POST /user/me/resend-verification
+   *
+   * O endpoint público equivalente pede o e-mail e responde sempre igual
+   * para não revelar cadastros; aqui o usuário já está autenticado, então a
+   * resposta pode ser específica e trazer o novo prazo.
+   */
+  @Post("me/resend-verification")
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  async resendMyVerification(@CurrentUser() currentUser: UserFromJwt) {
+    const user = await this.userService.findOneRaw(currentUser.id);
+
+    if (!user) {
+      throw new NotFoundException("Usuário não encontrado");
+    }
+
+    if (user.email_verified) {
+      return {
+        success: true,
+        already_verified: true,
+        message: "Seu e-mail já está confirmado.",
+      };
+    }
+
+    const { token, expiresAt } =
+      await this.userService.issueEmailVerificationToken(user.id);
+
+    const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
+
+    await this.emailService.sendEmailVerification(
+      user.email,
+      user.name,
+      `${frontendUrl}/confirm-email?token=${token}`,
+    );
+
+    return {
+      success: true,
+      already_verified: false,
+      expires_at: expiresAt,
+      message: "Enviamos um novo link de confirmação para o seu e-mail.",
+    };
   }
 
   /**

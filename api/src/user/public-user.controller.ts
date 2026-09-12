@@ -11,7 +11,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { UserService } from "./user.service";
+import {
+  EMAIL_VERIFICATION_TTL_HORAS,
+  UserService,
+} from "./user.service";
 import { CreatePublicUserDto } from "./dto/create-public-user.dto";
 import { EmailService } from "../email/email.service";
 import { ConfiguracoesService } from "../configuracoes/configuracoes.service";
@@ -78,10 +81,11 @@ export class PublicUserController {
         }
       }
 
-      // Gerar token de validação de e-mail (válido por 24 horas)
+      // Token de validação de e-mail, com a validade padrão do sistema.
       const emailToken = crypto.randomBytes(32).toString("hex");
-      const tokenExpiration = new Date();
-      tokenExpiration.setHours(tokenExpiration.getHours() + 24);
+      const tokenExpiration = new Date(
+        Date.now() + EMAIL_VERIFICATION_TTL_HORAS * 60 * 60 * 1000,
+      );
 
       // Cria o usuário sempre como Parceiro inativo, aguardando a
       // confirmação de e-mail e a aprovação do administrador.
@@ -190,11 +194,16 @@ export class PublicUserController {
       // Validar e-mail
       await this.userService.verifyEmail(user.id);
 
-      // Enviar e-mail de boas-vindas (opcional, não bloqueia se falhar)
+      // Confirmar o e-mail não ativa a conta: o status só vira "Ativo"
+      // quando um administrador aprova, e é lá que sai o aviso de conta
+      // ativada. Aqui vai apenas o recibo da confirmação.
       try {
-        await this.emailService.sendWelcomeEmail(user.email, user.name);
+        await this.emailService.sendEmailConfirmedEmail(user.email, user.name);
       } catch (emailError) {
-        console.log("E-mail de boas-vindas não pôde ser enviado:", emailError);
+        console.log(
+          "E-mail de confirmação não pôde ser enviado:",
+          emailError,
+        );
       }
 
       // Enviar notificação para a equipe administrativa sobre novo cadastro
@@ -215,6 +224,9 @@ export class PublicUserController {
         success: true,
         message: "E-mail validado com sucesso",
         userId: user.id,
+        status: user.status,
+        // O painel usa isto para explicar que ainda falta a aprovação.
+        aguardando_aprovacao: user.status !== "Ativo",
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -252,16 +264,8 @@ export class PublicUserController {
         return genericResponse;
       }
 
-      // Gerar novo token de validação
-      const emailToken = crypto.randomBytes(32).toString("hex");
-      const tokenExpiration = new Date();
-      tokenExpiration.setHours(tokenExpiration.getHours() + 24);
-
-      await this.userService.updateEmailVerificationToken(
-        user.id,
-        emailToken,
-        tokenExpiration,
-      );
+      const { token: emailToken } =
+        await this.userService.issueEmailVerificationToken(user.id);
 
       const frontendUrl = process.env.FRONTEND_URL || "https://indiqx.club";
       const confirmationUrl = `${frontendUrl}/confirm-email?token=${emailToken}`;

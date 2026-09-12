@@ -836,18 +836,23 @@ export class EmailService {
    * @param email E-mail do destinatário
    * @param name Nome do destinatário
    */
-  async sendWelcomeEmail(email: string, name: string): Promise<void> {
+  /**
+   * Recibo da confirmação de e-mail.
+   * Não anuncia conta ativa: quem ativa é o administrador, e esse aviso sai
+   * em sendPartnerActivationEmail quando o status vira "Ativo".
+   */
+  async sendEmailConfirmedEmail(email: string, name: string): Promise<void> {
     try {
       await this.mailerService.sendMail({
         to: email,
         from: '"Indiqx Club" <noreply@indiqx.club>',
-        subject: "Bem-vindo ao Indiqx Club!",
-        html: this.getWelcomeEmailTemplate(name),
+        subject: "E-mail confirmado - Indiqx Club",
+        html: this.getEmailConfirmedTemplate(name),
       });
 
-      console.log(`✅ E-mail de boas-vindas enviado para: ${email}`);
+      console.log(`✅ E-mail de confirmação enviado para: ${email}`);
     } catch (error) {
-      console.error("❌ Erro ao enviar e-mail de boas-vindas:", error);
+      console.error("❌ Erro ao enviar e-mail de confirmação:", error);
       // Não lança erro pois é um e-mail opcional
     }
   }
@@ -1014,7 +1019,7 @@ export class EmailService {
   /**
    * Template HTML do e-mail de boas-vindas
    */
-  private getWelcomeEmailTemplate(name: string): string {
+  private getEmailConfirmedTemplate(name: string): string {
     return `
       <!DOCTYPE html>
       <html>
@@ -1063,13 +1068,17 @@ export class EmailService {
           </div>
 
           <div class="content">
-            <h2 style="color: #1f2937; margin-top: 0;">Bem-vindo ao Indiqx Club, ${name}! 🎉</h2>
+            <h2 style="color: #1f2937; margin-top: 0;">E-mail confirmado, ${name}! ✅</h2>
 
-            <p>Sua conta foi ativada com sucesso!</p>
+            <p>Recebemos a confirmação do seu e-mail. Obrigado!</p>
 
-            <p>Agora você tem acesso completo ao nosso sistema de indicações e recompensas.</p>
+            <p>
+              Seu cadastro agora está em análise. Assim que um administrador
+              aprovar sua conta, você recebe um novo e-mail avisando que o
+              acesso ao painel foi liberado.
+            </p>
 
-            <p>Estamos muito felizes em ter você conosco!</p>
+            <p>Não é preciso fazer mais nada por enquanto.</p>
           </div>
 
           <div class="footer">
