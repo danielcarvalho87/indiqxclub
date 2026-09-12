@@ -331,7 +331,24 @@ export class AssinaturasService {
   async assertPodeAtivarParceiro(masterId: number): Promise<void> {
     if (!masterId) return;
 
-    const assinatura = await this.assinaturaAtiva(masterId);
+    let assinatura: Assinatura | null;
+
+    try {
+      assinatura = await this.assinaturaAtiva(masterId);
+    } catch (erro) {
+      // A API pode subir antes de o SQL de criação das tabelas rodar no
+      // banco. Nesse intervalo, ativar um parceiro não pode quebrar: sem
+      // catálogo não há limite a aplicar. Remover quando a migração
+      // estiver aplicada em todos os ambientes.
+      if (erro?.code === "ER_NO_SUCH_TABLE") {
+        console.warn(
+          "Tabela de assinaturas ausente: limite de parceiros não aplicado.",
+        );
+        return;
+      }
+
+      throw erro;
+    }
     const limite = assinatura?.plano?.limiteParceiros ?? null;
 
     if (limite === null) return;
