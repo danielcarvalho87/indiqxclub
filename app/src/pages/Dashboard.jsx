@@ -20,6 +20,7 @@ import ClientRegistrationModal from "../components/Modals/ClientRegistrationModa
 import ClientViewModal from "../components/Modals/ClientViewModal";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
+import { ehQualquerAdmin, ehParceiro } from "../utils/level";
 import { apiFetch, mensagemDeErro } from "../lib/http";
 import {
   CONFIG_PADRAO,
@@ -37,6 +38,7 @@ import {
 } from "../utils/pontos";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import EmailVerificationBanner from "../components/EmailVerificationBanner";
 
 const Dashboard = () => {
   const { userId, userLevel, masterId } = useAuth();
@@ -66,12 +68,7 @@ const Dashboard = () => {
       const token = window.localStorage.getItem("token");
 
       let currentConfig = { ...CONFIG_PADRAO };
-      const targetMasterId =
-        userLevel === "Administrador" ||
-        userLevel === "Admin" ||
-        userLevel === "FullAdmin"
-          ? userId
-          : masterId;
+      const targetMasterId = ehQualquerAdmin(userLevel) ? userId : masterId;
 
       if (targetMasterId) {
         try {
@@ -111,7 +108,7 @@ const Dashboard = () => {
       const clientsData = await resClients.json();
       const usersData = await resUsers.json();
 
-      const parceirosList = usersData.filter((u) => u.level === "Parceiro");
+      const parceirosList = usersData.filter((u) => ehParceiro(u.level));
       setParceiros(parceirosList);
 
       processStats(clientsData, parceirosList, currentConfig);
@@ -300,6 +297,8 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 p-3 md:p-4">
+      <EmailVerificationBanner />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {statsCards.map((card) => {
           const Icon = card.icon;

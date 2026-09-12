@@ -11,33 +11,6 @@ export const useAuth = () => {
   };
 };
 
-// Hook para verificar permissões específicas
-export function usePermission(requiredLevel) {
-  const { userLevel, isAuthenticated } = useAuth();
-
-  // Hierarquia de níveis (ajuste conforme sua aplicação)
-  const levelHierarchy = {
-    admin: 1,
-    master: 2,
-    manager: 3,
-  };
-
-  const hasPermission = () => {
-    if (!isAuthenticated()) return false;
-
-    const currentLevel = levelHierarchy[userLevel?.toLowerCase()] || 0;
-    const required = levelHierarchy[requiredLevel?.toLowerCase()] || 0;
-
-    return currentLevel >= required;
-  };
-
-  return {
-    hasPermission: hasPermission(),
-    userLevel,
-    isAuthenticated: isAuthenticated(),
-  };
-}
-
 // Hook para proteger rotas
 export function useProtectedRoute(redirectTo = "/login") {
   const { isAuthenticated, loading, isInitialized } = useAuth();

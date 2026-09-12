@@ -7,6 +7,7 @@ import UserRegistrationModal from "../components/Modals/UserRegistrationModal";
 import ConfirmModal from "../components/Modals/ConfirmModal";
 import { GET_USERS_PAGINADO, POST_USER, PUT_USER, DELETE_USER } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { ehFullAdmin, ehParceiro, ehQualquerAdmin } from "../utils/level";
 import { apiFetch, mensagemDeErro } from "../lib/http";
 import { useDebounce } from "../hooks/useDebounce";
 import { Pagination } from "../components/ui/Pagination";
@@ -51,11 +52,7 @@ const Usuarios = () => {
         // A API já limita ao que este usuário pode ver; esta tela mostra
         // apenas as contas administrativas.
         setUsuarios(
-          json.data.filter((user) =>
-            ["Administrador", "Admin", "FullAdmin", "Full Admin"].includes(
-              user.level,
-            ),
-          ),
+          json.data.filter((user) => ehQualquerAdmin(user.level)),
         );
         setPaginacao({
           page: json.page,
@@ -163,7 +160,7 @@ const Usuarios = () => {
     }
   };
 
-  const isFullAdmin = userLevel === "FullAdmin" || userLevel === "Full Admin";
+  const isFullAdmin = ehFullAdmin(userLevel);
 
   if (loading && usuarios.length === 0 && !buscaAtrasada) {
     return <LoadingSpinner fullScreen message="Carregando usuários..." />;
@@ -234,10 +231,9 @@ const Usuarios = () => {
                     <td className="py-4 px-4">
                       <span
                         className={`px-2 py-1 rounded text-xs font-semibold ${
-                          usuario.level === "Administrador" ||
-                          usuario.level === "Admin"
+                          ehQualquerAdmin(usuario.level)
                             ? "bg-purple-900/30 text-purple-400"
-                            : usuario.level === "Parceiro"
+                            : ehParceiro(usuario.level)
                               ? "bg-blue-900/30 text-blue-400"
                               : "bg-brand-border text-brand-muted"
                         }`}
@@ -303,7 +299,7 @@ const Usuarios = () => {
         onClose={handleCloseModal}
         onSubmit={handleSaveUser}
         initialData={selectedUser}
-        isParceiro={userLevel === "Parceiro"}
+        isParceiro={ehParceiro(userLevel)}
         currentUserLevel={userLevel}
       />
 

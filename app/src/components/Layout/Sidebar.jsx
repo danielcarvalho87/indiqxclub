@@ -11,89 +11,46 @@ import {
   X,
   ListPlus,
   TrendingUp,
+  CreditCard,
+  Receipt,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../ui/Button";
 import logoIndiqx from "../../assets/indiqx-logo-w.png";
+import { podeAcessarRota } from "../../utils/permissoes";
+import { ehParceiro } from "../../utils/level";
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const { userLogout, userLevel, data } = useAuth();
   const location = useLocation();
   const userName = [data?.name, data?.sobrenome].filter(Boolean).join(" ");
 
+  // Ordem de exibição. Quem vê cada item sai de ACESSO_POR_ROTA, a mesma
+  // regra que o PrivateLayout aplica na URL — antes o menu tinha uma lista
+  // própria de papéis ("master", "manager") e ela divergia da API.
   const allMenuItems = [
-    {
-      name: "Dashboard",
-      icon: LayoutDashboard,
-      path: "/dashboard",
-      roles: ["admin", "master", "manager"],
-    },
-    {
-      name: "Meus Ganhos",
-      icon: TrendingUp,
-      path: "/meus-ganhos",
-      roles: ["parceiro"],
-    },
-    {
-      name: "Parceiros",
-      icon: Users,
-      path: "/parceiros",
-      roles: ["admin", "master", "manager"],
-    },
-    {
-      name: "Clientes",
-      icon: ListPlus,
-      path: "/clientes",
-      roles: ["admin", "master", "manager", "parceiro"],
-    },
-    {
-      name: "Bonificacoes",
-      icon: Ticket,
-      path: "/bonificacoes",
-      roles: ["admin", "master", "manager"],
-    },
-    {
-      name: "Relatórios",
-      icon: BarChart,
-      path: "/relatorios",
-      roles: ["admin", "master", "manager", "fulladmin"],
-    },
-    {
-      name: "Usuários",
-      icon: Users,
-      path: "/usuarios",
-      roles: ["admin", "master", "manager", "fulladmin"],
-    },
-    {
-      name: "Configurações",
-      icon: Settings,
-      path: "/configuracoes",
-      roles: ["admin", "master", "manager", "fulladmin"],
-    },
-    {
-      name: "Meus Dados",
-      icon: User,
-      path: "/meus-dados",
-      roles: ["parceiro"],
-    },
+    { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+    { name: "Meus Ganhos", icon: TrendingUp, path: "/meus-ganhos" },
+    { name: "Parceiros", icon: Users, path: "/parceiros" },
+    { name: "Clientes", icon: ListPlus, path: "/clientes" },
+    { name: "Bonificacoes", icon: Ticket, path: "/bonificacoes" },
+    { name: "Relatórios", icon: BarChart, path: "/relatorios" },
+    { name: "Usuários", icon: Users, path: "/usuarios" },
+    { name: "Planos", icon: CreditCard, path: "/planos" },
+    { name: "Minha Assinatura", icon: Receipt, path: "/assinatura" },
+    { name: "Configurações", icon: Settings, path: "/configuracoes" },
+    { name: "Meus Dados", icon: User, path: "/meus-dados" },
   ];
 
   const menuItems = allMenuItems.filter((item) => {
-    if (!userLevel) return false;
-    let level = userLevel.toLowerCase().replace(/\s+/g, "");
-    // Normalizar nível 'administrador' para 'admin' para corresponder aos roles
-    if (level === "administrador") level = "admin";
-    if (level === "fulladmin") {
-      // Ocultar menus exclusivos de parceiro para o FullAdmin
-      if (
-        item.path === "/meus-ganhos" ||
-        item.path === "/meus-dados"
-      ) {
-        return false;
-      }
-      return true;
+    // "Meus Dados" é liberado para todos na URL (cada um edita o próprio
+    // cadastro), mas no menu só faz sentido para o parceiro: o administrador
+    // usa a tela de Usuários.
+    if (item.path === "/meus-dados" && !ehParceiro(userLevel)) {
+      return false;
     }
-    return item.roles.includes(level);
+
+    return podeAcessarRota(userLevel, item.path);
   });
 
   // Fechar a sidebar no mobile ao mudar de rota

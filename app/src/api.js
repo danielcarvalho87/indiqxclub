@@ -274,3 +274,165 @@ export function DELETE_BONIFICACAO(id, token) {
     },
   };
 }
+
+/** Situação da confirmação de e-mail do usuário autenticado. */
+export function GET_EMAIL_VERIFICATION(token) {
+  return {
+    url: API_URL + "/user/me/email-verification",
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+/** Reenvia o link de confirmação para o e-mail do usuário autenticado. */
+export function POST_REENVIAR_CONFIRMACAO(token) {
+  return {
+    url: API_URL + "/user/me/resend-verification",
+    options: {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+// ============================================
+// Planos e assinaturas
+// Catálogo é exclusivo do FullAdmin; /assinaturas/me responde para o
+// próprio usuário autenticado.
+// ============================================
+
+export function GET_PLANOS(token, incluirInativos = false) {
+  return {
+    url: API_URL + "/planos" + (incluirInativos ? "?incluirInativos=true" : ""),
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+export function POST_PLANO(body, token) {
+  return {
+    url: API_URL + "/planos",
+    options: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify(body),
+    },
+  };
+}
+
+export function PUT_PLANO(id, body, token) {
+  return {
+    url: API_URL + `/planos/${id}`,
+    options: {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify(body),
+    },
+  };
+}
+
+export function DELETE_PLANO(id, token) {
+  return {
+    url: API_URL + `/planos/${id}`,
+    options: {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+/** Assinatura de cada administrador (FullAdmin). */
+export function GET_ASSINATURAS(token) {
+  return {
+    url: API_URL + "/assinaturas",
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+/** Plano, vigência e uso do próprio usuário. */
+export function GET_MINHA_ASSINATURA(token) {
+  return {
+    url: API_URL + "/assinaturas/me",
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+export function GET_MEU_HISTORICO_ASSINATURAS(token) {
+  return {
+    url: API_URL + "/assinaturas/me/historico",
+    options: {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}
+
+export function POST_ASSINATURA(body, token) {
+  return {
+    url: API_URL + "/assinaturas",
+    options: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify(body),
+    },
+  };
+}
+
+export function PUT_ASSINATURA(id, body, token) {
+  return {
+    url: API_URL + `/assinaturas/${id}`,
+    options: {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify(body),
+    },
+  };
+}
+
+export function DELETE_ASSINATURA(id, token) {
+  return {
+    url: API_URL + `/assinaturas/${id}`,
+    options: {
+      method: "DELETE",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    },
+  };
+}

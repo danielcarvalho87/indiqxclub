@@ -4,6 +4,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { maskPhone, maskCurrency, unmaskCurrency } from "../../utils/masks";
 import { useAuth } from "../../hooks/useAuth";
+import { ehParceiro } from "../../utils/level";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 
 const ClientRegistrationModal = ({
@@ -14,6 +15,8 @@ const ClientRegistrationModal = ({
   parceiros = [],
 }) => {
   const { userLevel, userId, data: userData } = useAuth();
+  // Normaliza o nível: o banco alterna entre "Parceiro" e "parceiro".
+  const parceiroLogado = ehParceiro(userLevel);
   const defaultFormState = {
     nome: "",
     sobrenome: "",
@@ -65,7 +68,7 @@ const ClientRegistrationModal = ({
       } else {
         setFormData({
           ...defaultFormState,
-          corretor_id: userLevel === "Parceiro" ? userId : "",
+          corretor_id: parceiroLogado ? userId : "",
         });
         setIsEditing(false);
       }
@@ -111,7 +114,7 @@ const ClientRegistrationModal = ({
       novos.email = "E-mail inválido.";
     }
 
-    if (userLevel !== "Parceiro" && !formData.corretor_id) {
+    if (!parceiroLogado && !formData.corretor_id) {
       novos.corretor_id = "Selecione o parceiro responsável.";
     }
 
@@ -267,22 +270,22 @@ const ClientRegistrationModal = ({
               <div className="flex flex-col gap-2 relative" ref={dropdownRef}>
                 <label className="text-sm font-medium text-brand-muted">
                   Parceiro{" "}
-                  {userLevel !== "Parceiro" && (
+                  {!parceiroLogado && (
                     <span className="text-red-500">*</span>
                   )}
                 </label>
 
                 <div
                   className={`flex w-full items-center justify-between rounded-xl border border-brand-border bg-brand-dark/60 px-4 py-3 text-brand-text transition-all duration-200 ${
-                    userLevel === "Parceiro"
+                    parceiroLogado
                       ? "cursor-not-allowed opacity-70"
                       : "cursor-pointer focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primary/30"
                   }`}
                   onClick={() =>
-                    userLevel !== "Parceiro" &&
+                    !parceiroLogado &&
                     setIsDropdownOpen(!isDropdownOpen)
                   }
-                  tabIndex={userLevel === "Parceiro" ? -1 : 0}
+                  tabIndex={parceiroLogado ? -1 : 0}
                 >
                   <span
                     className={
@@ -294,7 +297,7 @@ const ClientRegistrationModal = ({
                     {formData.corretor_id
                       ? (() => {
                           if (
-                            userLevel === "Parceiro" &&
+                            parceiroLogado &&
                             String(formData.corretor_id) === String(userId)
                           ) {
                             return `${userData?.name || ""} ${userData?.sobrenome || ""}`;
@@ -308,7 +311,7 @@ const ClientRegistrationModal = ({
                         })()
                       : "Selecione um parceiro"}
                   </span>
-                  {userLevel !== "Parceiro" && (
+                  {!parceiroLogado && (
                     <ChevronDown
                       size={16}
                       className={`text-brand-muted transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
@@ -395,8 +398,8 @@ const ClientRegistrationModal = ({
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
-                  disabled={userLevel === "Parceiro"}
-                  className={`${selectStyle} ${userLevel === "Parceiro" ? "cursor-not-allowed opacity-50" : ""}`}
+                  disabled={parceiroLogado}
+                  className={`${selectStyle} ${parceiroLogado ? "cursor-not-allowed opacity-50" : ""}`}
                 >
                   <option value="Novo cliente">Novo cliente</option>
                   <option value="Em atendimento">Em atendimento</option>

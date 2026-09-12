@@ -17,7 +17,8 @@ import * as bcrypt from "bcrypt";
 import * as crypto from "crypto";
 import { UserFromJwt } from "../auth/models/UserFromJwt";
 import { EmailService } from "../email/email.service";
-import { isAdmin, isFullAdmin } from "../auth/roles/level.util";
+import { isAdmin, isFullAdmin, isParceiro } from "../auth/roles/level.util";
+import { AssinaturasService } from "../assinaturas/assinaturas.service";
 import {
   buildPaginated,
   escapeLike,
@@ -60,6 +61,7 @@ export class UserService {
     @Inject("USER_REPOSITORY")
     private userRepository: Repository<User>,
     private emailService: EmailService,
+    private assinaturasService: AssinaturasService,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -94,6 +96,17 @@ export class UserService {
       last_activity: null,
       tipo_pessoa: createUserDto.tipo_pessoa || "fisica",
     };
+    // Um parceiro criado já ativo ocupa vaga no plano da empresa.
+    if (
+      isParceiro(data.level) &&
+      data.master_id &&
+      String(data.status).toLowerCase() === "ativo"
+    ) {
+      await this.assinaturasService.assertPodeAtivarParceiro(
+        Number(data.master_id),
+      );
+    }
+
     const createdUser = await this.userRepository.save({ ...data });
     return sanitizeUser(createdUser);
   }
@@ -215,6 +228,19 @@ export class UserService {
     // Tratar outros campos que podem vir vazios
     if (data.cpf !== undefined && data.cpf === "") {
       data.cpf = null;
+    }
+
+    // A vaga no plano é ocupada na ativação, não no cadastro: é aqui que o
+    // teto do plano precisa ser conferido.
+    const virandoAtivo =
+      currentUser &&
+      String(currentUser.status).toLowerCase() !== "ativo" &&
+      String(data.status ?? currentUser.status).toLowerCase() === "ativo";
+
+    if (virandoAtivo && isParceiro(currentUser.level) && currentUser.master_id) {
+      await this.assinaturasService.assertPodeAtivarParceiro(
+        Number(currentUser.master_id),
+      );
     }
 
     // Atualizar o usuário existente

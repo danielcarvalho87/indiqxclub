@@ -14,6 +14,7 @@ import {
   GET_USERS,
 } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { ehParceiro } from "../utils/level";
 import { apiFetch, mensagemDeErro } from "../lib/http";
 import { useDebounce } from "../hooks/useDebounce";
 import { Pagination } from "../components/ui/Pagination";
@@ -84,7 +85,7 @@ const Clientes = () => {
         const json = await response.json();
         setParceiros(
           json.filter(
-            (user) => user.level === "Parceiro" || user.level === "parceiro",
+            (user) => ehParceiro(user.level),
           ),
         );
       }
@@ -316,7 +317,7 @@ const Clientes = () => {
                         >
                           <Pencil size={18} />
                         </Button>
-                        {userLevel !== "Parceiro" && (
+                        {!ehParceiro(userLevel) && (
                           <Button
                             onClick={() => handleOpenConfirmDelete(cliente)}
                             variant="danger"

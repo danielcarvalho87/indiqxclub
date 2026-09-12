@@ -12,6 +12,8 @@ import { RolesGuard } from "./auth/roles/roles.guard";
 import { ClientesModule } from "./clientes/clientes.module";
 import { BonificacoesModule } from "./bonificacoes/bonificacoes.module";
 import { ConfiguracoesModule } from "./configuracoes/configuracoes.module";
+import { PlanosModule } from "./planos/planos.module";
+import { AssinaturasModule } from "./assinaturas/assinaturas.module";
 
 @Module({
   controllers: [AppController],
@@ -46,6 +48,8 @@ import { ConfiguracoesModule } from "./configuracoes/configuracoes.module";
     ClientesModule,
     BonificacoesModule,
     ConfiguracoesModule,
+    PlanosModule,
+    AssinaturasModule,
   ],
   exports: [AppService],
 })

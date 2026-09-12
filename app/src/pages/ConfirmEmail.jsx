@@ -21,6 +21,8 @@ const ConfirmEmail = () => {
   const [message, setMessage] = useState("");
   const [resendEmail, setResendEmail] = useState("");
   const [resending, setResending] = useState(false);
+  // A API informa se o cadastro ainda depende da aprovação do admin.
+  const [aguardandoAprovacao, setAguardandoAprovacao] = useState(true);
   // StrictMode monta o componente duas vezes em dev; sem isso a segunda
   // chamada recebe "E-mail já foi validado" e a tela mostra erro.
   const confirmed = useRef(false);
@@ -48,6 +50,7 @@ const ConfirmEmail = () => {
         if (response.ok) {
           setStatus("success");
           setMessage(data.message || "E-mail validado com sucesso.");
+          setAguardandoAprovacao(data.aguardando_aprovacao !== false);
         } else {
           setStatus("error");
           setMessage(data.message || "Não foi possível validar o e-mail.");
@@ -113,8 +116,9 @@ const ConfirmEmail = () => {
             <CheckCircle size={56} className="text-green-500" />
             <p className="text-center text-brand-text">{message}</p>
             <p className="text-center text-sm text-brand-muted">
-              Sua conta será liberada assim que o administrador aprovar o
-              cadastro.
+              {aguardandoAprovacao
+                ? "Sua conta será liberada assim que o administrador aprovar o cadastro. Você recebe um e-mail quando isso acontecer."
+                : "Sua conta já está ativa, é só entrar."}
             </p>
             <Button onClick={() => navigate("/login")} className="w-full py-3">
               IR PARA O LOGIN
@@ -129,7 +133,8 @@ const ConfirmEmail = () => {
 
             <form onSubmit={handleResend} className="w-full space-y-3 pt-2">
               <p className="text-sm text-brand-muted text-center">
-                Informe seu e-mail para receber um novo link de validação:
+                Informe seu e-mail para receber um novo link de validação. Cada
+                link vale 24 horas.
               </p>
               <Input
                 type="email"

@@ -17,6 +17,8 @@ import Clientes from "./pages/Clientes";
 import MeusGanhos from "./pages/MeusGanhos";
 import MeusDados from "./pages/MeusDados";
 import Configuracoes from "./pages/Configuracoes";
+import Planos from "./pages/Planos";
+import Assinatura from "./pages/Assinatura";
 
 function App() {
   return (
@@ -40,6 +42,8 @@ function App() {
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/usuarios" element={<Usuarios />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/planos" element={<Planos />} />
+            <Route path="/assinatura" element={<Assinatura />} />
           </Route>
 
           {/* Redirecionar qualquer outra rota para login */}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, createContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { TOKEN_POST, GET_USER } from "./../api";
 import { apiFetch, registerUnauthorizedHandler } from "../lib/http";
+import { rotaInicial } from "../utils/level";
 
 export const AuthContext = createContext();
 
@@ -235,15 +236,9 @@ export const AuthProvider = ({ children }) => {
           return false;
         }
 
-        // REDIRECIONAMENTO ADICIONADO AQUI
-        if (
-          userData.userLevel === "Parceiro" ||
-          userData.userLevel === "parceiro"
-        ) {
-          navigate("/meus-ganhos");
-        } else {
-          navigate("/dashboard");
-        }
+        // Destino inicial sai de rotaInicial: a comparação literal só
+        // acertava as grafias "Parceiro"/"parceiro".
+        navigate(rotaInicial(userData.userLevel));
 
         // Definir tempo de expiração da sessão
         ultimaAtividade.current = Date.now();
@@ -321,14 +316,7 @@ export const AuthProvider = ({ children }) => {
       const userData = await getUser(token);
       updateSessionExpiry();
 
-      if (
-        userData.userLevel === "Parceiro" ||
-        userData.userLevel === "parceiro"
-      ) {
-        navigate("/meus-ganhos");
-      } else {
-        navigate("/dashboard");
-      }
+      navigate(rotaInicial(userData.userLevel));
       return true;
     } catch (err) {
       console.error("Erro no login via token:", err);

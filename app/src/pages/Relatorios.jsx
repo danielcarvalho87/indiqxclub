@@ -14,6 +14,7 @@ import {
 import { Card } from "../components/ui/Card";
 import { GET_CLIENTES, GET_USERS, GET_CONFIGURACOES } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { ehQualquerAdmin, ehParceiro } from "../utils/level";
 import { apiFetch, mensagemDeErro } from "../lib/http";
 import {
   CONFIG_PADRAO,
@@ -50,12 +51,7 @@ const Relatorios = () => {
       const token = window.localStorage.getItem("token");
 
       let currentConfig = { ...CONFIG_PADRAO };
-      const targetMasterId =
-        userLevel === "Administrador" ||
-        userLevel === "Admin" ||
-        userLevel === "FullAdmin"
-          ? userId
-          : masterId;
+      const targetMasterId = ehQualquerAdmin(userLevel) ? userId : masterId;
 
       if (targetMasterId) {
         try {
@@ -94,7 +90,7 @@ const Relatorios = () => {
 
       const clients = await resClients.json();
       const users = await resUsers.json();
-      const parceiros = users.filter((u) => u.level === "Parceiro");
+      const parceiros = users.filter((u) => ehParceiro(u.level));
 
       processData(clients, parceiros, currentConfig);
     } catch (error) {

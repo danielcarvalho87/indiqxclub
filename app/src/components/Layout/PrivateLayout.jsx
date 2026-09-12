@@ -1,14 +1,17 @@
 import React, { useState } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { useProtectedRoute, useAuth } from "../../hooks/useAuth";
 import SessionTimeoutModal from "../Modals/SessionTimeoutModal";
 import logoIndiqx from "../../assets/indiqx-logo-w.png";
+import { podeAcessarRota, rotaPermitida } from "../../utils/permissoes";
 
 const PrivateLayout = () => {
   const { isLoading, shouldRedirect, redirectTo } = useProtectedRoute("/");
-  const { showSessionWarning, renewSession, userLogout } = useAuth();
+  const { showSessionWarning, renewSession, userLogout, userLevel } =
+    useAuth();
+  const { pathname } = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   if (isLoading) {
@@ -21,6 +24,17 @@ const PrivateLayout = () => {
 
   if (shouldRedirect) {
     return <Navigate to={redirectTo} replace />;
+  }
+
+  // Esconder o item no menu não bastava: a URL digitada à mão continuava
+  // abrindo a tela. O destino é a home do próprio nível, e o comparativo
+  // evita laço quando o nível não é reconhecido.
+  if (!podeAcessarRota(userLevel, pathname)) {
+    const destino = rotaPermitida(userLevel);
+
+    if (destino !== pathname) {
+      return <Navigate to={destino} replace />;
+    }
   }
 
   return (

@@ -7,6 +7,7 @@ import UserRegistrationModal from "../components/Modals/UserRegistrationModal";
 import ConfirmModal from "../components/Modals/ConfirmModal";
 import { GET_USERS_PAGINADO, POST_USER, PUT_USER, DELETE_USER } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { ehParceiro } from "../utils/level";
 import { apiFetch, mensagemDeErro } from "../lib/http";
 import { useDebounce } from "../hooks/useDebounce";
 import { Pagination } from "../components/ui/Pagination";
@@ -52,7 +53,7 @@ const Parceiros = () => {
         // os parceiros dos administradores.
         setParceiros(
           json.data.filter(
-            (user) => user.level === "Parceiro" || user.level === "parceiro",
+            (user) => ehParceiro(user.level),
           ),
         );
         setPaginacao({

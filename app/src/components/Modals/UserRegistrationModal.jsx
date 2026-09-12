@@ -5,6 +5,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { maskCPF, maskPhone, maskCEP } from "../../utils/masks";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
+import { ehFullAdmin, ehParceiro } from "../../utils/level";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -464,8 +465,7 @@ const UserRegistrationModal = ({
                     }
                   />
                 </div>
-                {currentUserLevel !== "Parceiro" &&
-                currentUserLevel !== "parceiro" ? (
+                {!ehParceiro(currentUserLevel) ? (
                   <>
                     <div>
                       <label className={labelStyle}>Nível de Acesso *</label>
@@ -476,8 +476,7 @@ const UserRegistrationModal = ({
                         className={selectStyle}
                         required
                       >
-                        {(currentUserLevel === "FullAdmin" ||
-                          currentUserLevel === "Full Admin") && (
+                        {ehFullAdmin(currentUserLevel) && (
                           <option value="FullAdmin">Full Admin</option>
                         )}
                         <option value="Administrador">Administrador</option>

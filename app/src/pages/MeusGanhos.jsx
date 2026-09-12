@@ -14,6 +14,7 @@ import {
 import { Card } from "../components/ui/Card";
 import { GET_CLIENTES, GET_BONIFICACOES, GET_CONFIGURACOES } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import { ehQualquerAdmin } from "../utils/level";
 import { apiFetch, mensagemDeErro } from "../lib/http";
 import {
   CONFIG_PADRAO,
@@ -27,6 +28,7 @@ import {
 } from "../utils/pontos";
 
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import EmailVerificationBanner from "../components/EmailVerificationBanner";
 
 const MeusGanhos = () => {
   const { userId, userLevel, masterId } = useAuth();
@@ -47,12 +49,7 @@ const MeusGanhos = () => {
       const token = window.localStorage.getItem("token");
 
       // Descobrir qual é o masterId para buscar configurações
-      const targetMasterId =
-        userLevel === "Administrador" ||
-        userLevel === "Admin" ||
-        userLevel === "FullAdmin"
-          ? userId
-          : masterId;
+      const targetMasterId = ehQualquerAdmin(userLevel) ? userId : masterId;
 
       let configData = { ...CONFIG_PADRAO };
 
@@ -162,6 +159,8 @@ const MeusGanhos = () => {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
+      <EmailVerificationBanner />
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-brand-text flex items-center gap-2">
