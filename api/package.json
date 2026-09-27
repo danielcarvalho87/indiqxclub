@@ -1,8 +1,8 @@
 {
-  "name": "api-saudeflow",
+  "name": "api-indiqx",
   "version": "2.0.0",
-  "description": "API do SaudeFlow - Sistema de gestão para profissionais de saúde autonomos",
-  "author": "Daniel Carvalho e Gabriel Mendonça - BY DC Comunicação Digital",
+  "description": "API do INDIQX - Clube de Benefícios",
+  "author": "Daniel Carvalho - BY DC Comunicação Digital",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
