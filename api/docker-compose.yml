@@ -12,11 +12,10 @@
 
 services:
   api:
+    image: indiqx-api:latest
     build:
       context: .
       dockerfile: Dockerfile
-    # Para Swarm com imagem pré-construída, comente o build acima e use:
-    # image: ghcr.io/<org>/indiqx-api:latest
     init: true
     ports:
       - "${PORT:-3011}:3011"
