@@ -9,6 +9,10 @@
 #   e aponte para a imagem do registry (troque o build por image).
 #
 # As variáveis abaixo devem estar no .env ou cadastradas no Portainer.
+#
+# Domínio público: https://api-indiqx.somosdc.com.br (roteado pelo Traefik
+# via network_public). Confira TRAEFIK_ENTRYPOINT e TRAEFIK_CERTRESOLVER
+# com os nomes usados no seu Traefik antes do deploy.
 
 services:
   api:
@@ -25,6 +29,8 @@ services:
 
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
+      # Vazio cai na lista padrao de origens definida em src/main.ts.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
 
       DATABASE_HOST: ${DATABASE_HOST}
       DATABASE_USER: ${DATABASE_USER}
@@ -49,6 +55,17 @@ services:
     deploy:
       mode: replicated
       replicas: 1
+      # O Traefik em modo Swarm le as labels do servico, nao do container:
+      # em `docker compose up` puro elas precisam ser movidas para
+      # `labels:` no nivel do servico.
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=network_public
+        - traefik.http.routers.indiqx-api.rule=Host(`${API_DOMAIN:-api-indiqx.somosdc.com.br}`)
+        - traefik.http.routers.indiqx-api.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.indiqx-api.tls=true
+        - traefik.http.routers.indiqx-api.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.services.indiqx-api.loadbalancer.server.port=3011
       restart_policy:
         condition: on-failure
       update_config:
