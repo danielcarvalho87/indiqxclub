@@ -12,10 +12,7 @@
 
 services:
   api:
-    image: indiqx-api:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/danielcarvalho87/indiqx-api:latest
     init: true
     ports:
       - "${PORT:-3011}:3011"
