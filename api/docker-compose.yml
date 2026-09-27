@@ -20,7 +20,7 @@ services:
     ports:
       - "${PORT:-3011}:3011"
     networks:
-      - indiqx_network
+      - network_public
     environment:
       NODE_ENV: production
       PORT: 3011
@@ -66,5 +66,6 @@ volumes:
     external: false
 
 networks:
-  indiqx_network:
-    driver: bridge
+  network_public:
+    external: true
+    name: network_public
