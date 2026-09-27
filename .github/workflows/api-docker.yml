@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: danielcarvalho87/indiqx-api
+  IMAGE_NAME: ${{ github.repository_owner }}/indiqx-api
 
 jobs:
   build-and-push:
@@ -44,4 +44,6 @@ jobs:
           context: ./api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
