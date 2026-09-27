@@ -11,15 +11,18 @@
 # As variáveis abaixo devem estar no .env ou cadastradas no Portainer.
 #
 # Domínio público: https://api-indiqx.somosdc.com.br (roteado pelo Traefik
-# via network_public). Confira TRAEFIK_ENTRYPOINT e TRAEFIK_CERTRESOLVER
-# com os nomes usados no seu Traefik antes do deploy.
+# via network_public). O Traefik deste servidor expoe o entrypoint
+# `websecure` e o resolver `letsencryptresolver` — mesmos nomes usados
+# pelos demais stacks em network_public.
 
 services:
   api:
     image: ghcr.io/danielcarvalho87/indiqx-api:latest
     init: true
-    ports:
-      - "${PORT:-3011}:3011"
+    # Sem Traefik? Descomente e coloque um proxy TLS por fora: em Swarm o
+    # `ports` publica no ingress e deixa a API em HTTP puro na internet.
+    # ports:
+    #   - "${PORT:-3011}:3011"
     networks:
       - network_public
     environment:
@@ -64,7 +67,7 @@ services:
         - traefik.http.routers.indiqx-api.rule=Host(`${API_DOMAIN:-api-indiqx.somosdc.com.br}`)
         - traefik.http.routers.indiqx-api.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
         - traefik.http.routers.indiqx-api.tls=true
-        - traefik.http.routers.indiqx-api.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.indiqx-api.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencryptresolver}
         - traefik.http.services.indiqx-api.loadbalancer.server.port=3011
       restart_policy:
         condition: on-failure
